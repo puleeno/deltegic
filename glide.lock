@@ -1,0 +1,6 @@
+hash: 50435eda7261eb123912792ef86bfff4c5235d1f13ff5d0b55df9a44331dd09e
+updated: 2019-12-10T04:12:40.816586+07:00
+imports:
+- name: github.com/sciter-sdk/go-sciter
+  version: 25d8ed42e0bb4c4acb742de9f148f6902d32ff41
+testImports: []
