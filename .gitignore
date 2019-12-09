@@ -31,3 +31,4 @@
 *.out
 *.app
 /vendor
+node_modules
