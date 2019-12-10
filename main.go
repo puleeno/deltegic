@@ -25,7 +25,7 @@ func main() {
 		log.Fatal(err)
 	}
 	//load file;加载文件
-	w.LoadFile("gui/index.htm")
+	w.LoadFile("gui/index.html")
 	//set title; 设置标题
 	w.SetTitle("Hello, world")
 	//show;显示窗口
