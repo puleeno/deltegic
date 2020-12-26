@@ -9,5 +9,11 @@ Deltegic downloader is a free, open-source download management tool with many fe
 3. GUI Framework - Sciter: https://sciter.com/
 4. GopherLua - VM and compiler for Lua in Go (Deltegic plugin): https://github.com/yuin/gopher-lua
 5. Tengo - A fast script language for Go (Deltegic plugin):  https://github.com/d5/tengo
-6. Browsers supporting: https://github.com/chromedp/chromedp
 7. Compile C Source: https://golang.org/cmd/cgo/
+
+
+Browser Headless
+Consider use Agouti (Chrome Webdriver) or ChromeDP (Google Chrome) to get file info via Javascript rendering
+
+- Agouti: https://github.com/sclevine/agouti
+- ChromeDP: https://github.com/chromedp/chromedp
