@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+
 	"github.com/sciter-sdk/go-sciter"
 	"github.com/sciter-sdk/go-sciter/window"
 )
@@ -25,7 +26,7 @@ func main() {
 		log.Fatal(err)
 	}
 	//load file;加载文件
-	w.LoadFile("gui/index.html")
+	w.LoadFile("./app/index.html")
 	//set title; 设置标题
 	w.SetTitle("Hello, world")
 	//show;显示窗口
