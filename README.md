@@ -11,6 +11,7 @@ Deltegic downloader is a free, open-source download management tool with many fe
 5. Tengo - A fast script language for Go (Deltegic plugin):  https://github.com/d5/tengo
 7. Compile C Source: https://golang.org/cmd/cgo/
 8. Javascript interpreter: https://github.com/robertkrimen/otto
+9. App notification: https://github.com/gen2brain/beeep
 
 
 Browser Headless
