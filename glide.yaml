@@ -1,7 +1,0 @@
-package: .
-import:
-- package: github.com/sciter-sdk/go-sciter
-  version: ^0.5.0
-- package: github.com/yuin/gopher-lua
-- package: github.com/chromedp/chromedp
-  version: ^0.5.2
