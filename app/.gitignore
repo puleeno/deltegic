@@ -1,0 +1,8 @@
+target/
+Cargo.lock
+*.pdb
+*.dSYM
+__pycache__/
+*.py[cod]
+.env
+*.log

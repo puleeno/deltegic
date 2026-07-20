@@ -1,0 +1,121 @@
+import { Button } from "std-widgets.slint";
+
+global Theme {
+    out property <color> bg: #1a1a2e;
+    out property <color> bg-panel: #16213e;
+    out property <color> accent: #e94560;
+    out property <color> text: #eaeaea;
+    out property <color> text-dim: #8a8a9a;
+    out property <color> warning: #ff9800;
+    out property <color> border: #2a2a4a;
+}
+
+/// Captcha notification window — pops up when an addon needs user action
+export component CaptchaWindow inherits Window {
+    title: "Action Required — NexDL";
+    background: Theme.bg;
+    width: 460px;
+    height: 300px;
+    always-on-top: true;
+
+    in property <string> site-name: "Unknown Site";
+    in property <string> captcha-url: "";
+    in property <string> message: "A captcha or login is required to continue.";
+
+    callback open-browser();   // Open headless browser for user to solve
+    callback skip();           // Skip this task
+    callback cancel();         // Cancel the task
+
+    VerticalLayout {
+        padding: 32px;
+        spacing: 20px;
+        alignment: center;
+
+        // Warning icon + header
+        HorizontalLayout {
+            spacing: 12px;
+            alignment: center;
+
+            Rectangle {
+                width: 48px;
+                height: 48px;
+                background: Theme.warning.with-alpha(0.15);
+                border-radius: 24px;
+                border-color: Theme.warning;
+                border-width: 2px;
+                Text {
+                    text: "⚠";
+                    font-size: 22px;
+                    color: Theme.warning;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+
+            VerticalLayout {
+                alignment: center;
+                Text {
+                    text: "Action Required";
+                    color: Theme.text;
+                    font-size: 18px;
+                    font-weight: 800;
+                }
+                Text {
+                    text: site-name;
+                    color: Theme.warning;
+                    font-size: 13px;
+                }
+            }
+        }
+
+        Text {
+            text: message;
+            color: Theme.text-dim;
+            font-size: 13px;
+            horizontal-alignment: center;
+            wrap: word-wrap;
+        }
+
+        if captcha-url != "": Text {
+            text: captcha-url;
+            color: Theme.accent;
+            font-size: 11px;
+            horizontal-alignment: center;
+            overflow: elide;
+        }
+
+        HorizontalLayout {
+            spacing: 12px;
+            alignment: center;
+
+            Button {
+                text: "🌐 Open Browser to Solve";
+                width: 210px;
+                height: 40px;
+                clicked => { open-browser(); }
+            }
+
+            Button {
+                text: "Skip Task";
+                width: 100px;
+                height: 40px;
+                clicked => { skip(); }
+            }
+
+            Button {
+                text: "Cancel";
+                width: 80px;
+                height: 40px;
+                clicked => { cancel(); }
+            }
+        }
+
+        Text {
+            text: "Complete the captcha/login in the browser window, then it will continue automatically.";
+            color: Theme.text-dim;
+            font-size: 11px;
+            horizontal-alignment: center;
+            wrap: word-wrap;
+        }
+    }
+}
