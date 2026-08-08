@@ -1,22 +1,29 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: NexDL Download Manager API
 servers:
   - url: /api
-    description: Base API path
 tags:
   - name: health
-    description: Health operations
+    description: Health check
+  - name: tasks
+    description: Download queue management
+  - name: addons
+    description: Python addon management
+  - name: accounts
+    description: Account and cookie management
+  - name: scheduler
+    description: Task scheduler
+  - name: settings
+    description: Application settings
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,13 +31,716 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  # ── Tasks ─────────────────────────────────────────────────────────────────
+  /tasks:
+    get:
+      operationId: listTasks
+      tags: [tasks]
+      summary: List all download tasks
+      parameters:
+        - in: query
+          name: status
+          schema:
+            type: string
+          required: false
+        - in: query
+          name: limit
+          schema:
+            type: integer
+          required: false
+        - in: query
+          name: offset
+          schema:
+            type: integer
+          required: false
+      responses:
+        "200":
+          description: Task list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaskList"
+    post:
+      operationId: createTask
+      tags: [tasks]
+      summary: Add a URL to the download queue
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TaskInput"
+      responses:
+        "201":
+          description: Task created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Task"
+
+  /tasks/stats:
+    get:
+      operationId: getQueueStats
+      tags: [tasks]
+      summary: Get queue statistics
+      responses:
+        "200":
+          description: Queue statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QueueStats"
+
+  /tasks/{id}:
+    get:
+      operationId: getTask
+      tags: [tasks]
+      summary: Get a single task
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      responses:
+        "200":
+          description: Task detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Task"
+        "404":
+          description: Not found
+    delete:
+      operationId: removeTask
+      tags: [tasks]
+      summary: Remove a task from the queue
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      responses:
+        "204":
+          description: Removed
+
+  /tasks/{id}/pause:
+    post:
+      operationId: pauseTask
+      tags: [tasks]
+      summary: Pause a task
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      responses:
+        "200":
+          description: Task paused
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Task"
+
+  /tasks/{id}/resume:
+    post:
+      operationId: resumeTask
+      tags: [tasks]
+      summary: Resume a paused task
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      responses:
+        "200":
+          description: Task resumed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Task"
+
+  /tasks/{id}/cancel:
+    post:
+      operationId: cancelTask
+      tags: [tasks]
+      summary: Cancel a task
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      responses:
+        "200":
+          description: Task cancelled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Task"
+
+  /tasks/{id}/retry:
+    post:
+      operationId: retryTask
+      tags: [tasks]
+      summary: Retry a failed task
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      responses:
+        "200":
+          description: Task retried
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Task"
+
+  # ── Addons ────────────────────────────────────────────────────────────────
+  /addons:
+    get:
+      operationId: listAddons
+      tags: [addons]
+      summary: List all loaded addons
+      responses:
+        "200":
+          description: Addon list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Addon"
+
+  /addons/{name}/enable:
+    post:
+      operationId: enableAddon
+      tags: [addons]
+      summary: Enable an addon
+      parameters:
+        - in: path
+          name: name
+          schema:
+            type: string
+          required: true
+      responses:
+        "200":
+          description: Addon enabled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Addon"
+
+  /addons/{name}/disable:
+    post:
+      operationId: disableAddon
+      tags: [addons]
+      summary: Disable an addon
+      parameters:
+        - in: path
+          name: name
+          schema:
+            type: string
+          required: true
+      responses:
+        "200":
+          description: Addon disabled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Addon"
+
+  /addons/{name}/reload:
+    post:
+      operationId: reloadAddon
+      tags: [addons]
+      summary: Reload an addon from disk
+      parameters:
+        - in: path
+          name: name
+          schema:
+            type: string
+          required: true
+      responses:
+        "200":
+          description: Addon reloaded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Addon"
+
+  # ── Accounts ──────────────────────────────────────────────────────────────
+  /accounts:
+    get:
+      operationId: listAccounts
+      tags: [accounts]
+      summary: List all saved accounts
+      responses:
+        "200":
+          description: Account list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Account"
+    post:
+      operationId: createAccount
+      tags: [accounts]
+      summary: Add a new account with cookies
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccountInput"
+      responses:
+        "201":
+          description: Account created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Account"
+
+  /accounts/{id}:
+    get:
+      operationId: getAccount
+      tags: [accounts]
+      summary: Get account details
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      responses:
+        "200":
+          description: Account detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Account"
+        "404":
+          description: Not found
+    patch:
+      operationId: updateAccount
+      tags: [accounts]
+      summary: Update account label or cookies
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccountUpdate"
+      responses:
+        "200":
+          description: Account updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Account"
+    delete:
+      operationId: deleteAccount
+      tags: [accounts]
+      summary: Remove an account
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      responses:
+        "204":
+          description: Removed
+
+  # ── Scheduler ─────────────────────────────────────────────────────────────
+  /scheduler/entries:
+    get:
+      operationId: listScheduleEntries
+      tags: [scheduler]
+      summary: List all schedule entries
+      responses:
+        "200":
+          description: Schedule list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ScheduleEntry"
+    post:
+      operationId: createScheduleEntry
+      tags: [scheduler]
+      summary: Create a new schedule entry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScheduleInput"
+      responses:
+        "201":
+          description: Entry created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleEntry"
+
+  /scheduler/entries/{id}:
+    patch:
+      operationId: updateScheduleEntry
+      tags: [scheduler]
+      summary: Update a schedule entry
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScheduleUpdate"
+      responses:
+        "200":
+          description: Entry updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleEntry"
+    delete:
+      operationId: deleteScheduleEntry
+      tags: [scheduler]
+      summary: Remove a schedule entry
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      responses:
+        "204":
+          description: Removed
+
+  # ── Settings ──────────────────────────────────────────────────────────────
+  /settings:
+    get:
+      operationId: getSettings
+      tags: [settings]
+      summary: Get application settings
+      responses:
+        "200":
+          description: Settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Settings"
+    put:
+      operationId: updateSettings
+      tags: [settings]
+      summary: Update application settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SettingsUpdate"
+      responses:
+        "200":
+          description: Updated settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Settings"
+
 components:
   schemas:
     HealthStatus:
       type: object
+      required: [status]
       properties:
         status:
           type: string
-      required:
-        - status
 
+    # ── Task ──────────────────────────────────────────────────────────────
+    Task:
+      type: object
+      required: [id, url, title, status, progress, speed, eta, addonName, outputDir, createdAt]
+      properties:
+        id:
+          type: string
+        url:
+          type: string
+        title:
+          type: string
+        status:
+          type: string
+          enum: [queued, processing, downloading, post_processing, completed, paused, cancelled, failed]
+        progress:
+          type: number
+        downloaded:
+          type: integer
+        totalSize:
+          type: ["integer", "null"]
+        speed:
+          type: string
+        eta:
+          type: string
+        addonName:
+          type: string
+        outputDir:
+          type: string
+        outputPath:
+          type: ["string", "null"]
+        error:
+          type: ["string", "null"]
+        priority:
+          type: integer
+        subtasksDone:
+          type: integer
+        subtasksTotal:
+          type: integer
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+
+    TaskList:
+      type: object
+      required: [tasks, total]
+      properties:
+        tasks:
+          type: array
+          items:
+            $ref: "#/components/schemas/Task"
+        total:
+          type: integer
+
+    TaskInput:
+      type: object
+      required: [url]
+      properties:
+        url:
+          type: string
+        outputDir:
+          type: ["string", "null"]
+        priority:
+          type: ["integer", "null"]
+        addonHint:
+          type: ["string", "null"]
+
+    QueueStats:
+      type: object
+      required: [total, queued, processing, downloading, completed, failed, paused, cancelled]
+      properties:
+        total:
+          type: integer
+        queued:
+          type: integer
+        processing:
+          type: integer
+        downloading:
+          type: integer
+        completed:
+          type: integer
+        failed:
+          type: integer
+        paused:
+          type: integer
+        cancelled:
+          type: integer
+        totalDownloaded:
+          type: integer
+        activeSpeed:
+          type: string
+
+    # ── Addon ─────────────────────────────────────────────────────────────
+    Addon:
+      type: object
+      required: [name, version, description, author, supportedSites, enabled]
+      properties:
+        name:
+          type: string
+        version:
+          type: string
+        description:
+          type: string
+        author:
+          type: string
+        supportedSites:
+          type: array
+          items:
+            type: string
+        enabled:
+          type: boolean
+        path:
+          type: string
+
+    # ── Account ───────────────────────────────────────────────────────────
+    Account:
+      type: object
+      required: [id, label, site, cookieCount, createdAt]
+      properties:
+        id:
+          type: string
+        label:
+          type: string
+        site:
+          type: string
+        username:
+          type: ["string", "null"]
+        cookieCount:
+          type: integer
+        createdAt:
+          type: string
+
+    AccountInput:
+      type: object
+      required: [label, site]
+      properties:
+        label:
+          type: string
+        site:
+          type: string
+        username:
+          type: ["string", "null"]
+        cookies:
+          type: ["string", "null"]
+          description: Netscape or JSON cookie string
+
+    AccountUpdate:
+      type: object
+      properties:
+        label:
+          type: string
+        username:
+          type: ["string", "null"]
+        cookies:
+          type: ["string", "null"]
+
+    # ── Scheduler ─────────────────────────────────────────────────────────
+    ScheduleEntry:
+      type: object
+      required: [id, name, triggerType, action, enabled]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        triggerType:
+          type: string
+          enum: [once, interval, cron, on_startup]
+        triggerValue:
+          type: ["string", "null"]
+          description: ISO datetime for once, seconds for interval, cron expression for cron
+        action:
+          type: string
+          enum: [download, run_addon, cleanup]
+        actionTarget:
+          type: ["string", "null"]
+          description: URL for download, addon name for run_addon
+        enabled:
+          type: boolean
+        lastRun:
+          type: ["string", "null"]
+        nextRun:
+          type: ["string", "null"]
+
+    ScheduleInput:
+      type: object
+      required: [name, triggerType, action]
+      properties:
+        name:
+          type: string
+        triggerType:
+          type: string
+          enum: [once, interval, cron, on_startup]
+        triggerValue:
+          type: ["string", "null"]
+        action:
+          type: string
+          enum: [download, run_addon, cleanup]
+        actionTarget:
+          type: ["string", "null"]
+        enabled:
+          type: boolean
+
+    ScheduleUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        triggerType:
+          type: string
+          enum: [once, interval, cron, on_startup]
+        triggerValue:
+          type: ["string", "null"]
+        action:
+          type: string
+          enum: [download, run_addon, cleanup]
+        actionTarget:
+          type: ["string", "null"]
+        enabled:
+          type: boolean
+
+    # ── Settings ──────────────────────────────────────────────────────────
+    Settings:
+      type: object
+      required: [outputDir, maxConcurrent, autoStart, theme]
+      properties:
+        outputDir:
+          type: string
+        maxConcurrent:
+          type: integer
+        autoStart:
+          type: boolean
+        theme:
+          type: string
+          enum: [dark, light, system]
+        defaultAddon:
+          type: ["string", "null"]
+        proxyUrl:
+          type: ["string", "null"]
+        userAgent:
+          type: string
+        maxRetries:
+          type: integer
+        speedLimitKbps:
+          type: ["integer", "null"]
+
+    SettingsUpdate:
+      type: object
+      properties:
+        outputDir:
+          type: string
+        maxConcurrent:
+          type: integer
+        autoStart:
+          type: boolean
+        theme:
+          type: string
+          enum: [dark, light, system]
+        defaultAddon:
+          type: ["string", "null"]
+        proxyUrl:
+          type: ["string", "null"]
+        userAgent:
+          type: string
+        maxRetries:
+          type: integer
+        speedLimitKbps:
+          type: ["integer", "null"]
