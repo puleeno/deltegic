@@ -1,9 +1,9 @@
-use crate::{Result, NexDLError};
-use reqwest::{Client, header::{HeaderMap, HeaderValue, USER_AGENT, COOKIE}};
+use crate::Result;
+use reqwest::{Client, header::HeaderMap};
 use std::path::Path;
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
-use tracing::{debug, info};
+use tracing::info;
 
 /// Generic HTTP downloader with progress tracking
 pub struct HttpDownloader {
@@ -23,7 +23,6 @@ impl HttpDownloader {
         Self { client }
     }
 
-    /// Download a URL to a file, streaming with progress callback
     pub async fn download_to_file(
         &self,
         url: &str,
@@ -31,7 +30,6 @@ impl HttpDownloader {
         headers: Option<HeaderMap>,
         on_progress: impl Fn(u64, u64) + Send + 'static,
     ) -> Result<u64> {
-        // Ensure parent dir exists
         if let Some(parent) = output_path.parent() {
             fs::create_dir_all(parent).await?;
         }
@@ -61,7 +59,6 @@ impl HttpDownloader {
         Ok(downloaded)
     }
 
-    /// Fetch a URL as text (for HTML, JSON, etc.)
     pub async fn fetch_text(&self, url: &str, headers: Option<HeaderMap>) -> Result<String> {
         let mut request = self.client.get(url);
         if let Some(h) = headers {
@@ -71,7 +68,6 @@ impl HttpDownloader {
         Ok(text)
     }
 
-    /// Fetch a URL as JSON
     pub async fn fetch_json(&self, url: &str, headers: Option<HeaderMap>) -> Result<serde_json::Value> {
         let mut request = self.client.get(url);
         if let Some(h) = headers {
@@ -81,7 +77,6 @@ impl HttpDownloader {
         Ok(json)
     }
 
-    /// POST JSON and get JSON response
     pub async fn post_json(
         &self,
         url: &str,

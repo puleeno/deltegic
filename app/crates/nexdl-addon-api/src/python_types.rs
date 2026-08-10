@@ -15,7 +15,7 @@
 //! ```
 
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyList, PyString};
+use pyo3::types::{PyDict, PyList};
 use std::collections::HashMap;
 
 // ── DownloadItem ──────────────────────────────────────────────────────────────
@@ -142,7 +142,7 @@ impl PyHttpClient {
                         .map_err(|e| PyErr::new::<pyo3::exceptions::PyIOError, _>(e.to_string()))?;
                 }
 
-                let mut client_builder = reqwest::Client::builder()
+                let client_builder = reqwest::Client::builder()
                     .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
 
                 let client = client_builder.build()
@@ -390,6 +390,12 @@ pub fn create_nexdl_module(py: Python<'_>) -> PyResult<Bound<'_, pyo3::types::Py
     m.add_class::<PyHttpClient>()?;
     m.add_class::<PyStorage>()?;
     m.add_class::<PyContext>()?;
+    // UI classes
+    m.add_class::<crate::py_ui::PyUIForm>()?;
+    m.add_class::<crate::py_ui::PyUIPanel>()?;
+    m.add_class::<crate::py_ui::PyUIWindow>()?;
+    m.add_class::<crate::py_ui::PyUITabs>()?;
+    m.add_class::<crate::py_ui::PyUIContext>()?;
     Ok(m)
 }
 

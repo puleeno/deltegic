@@ -12,11 +12,9 @@ use std::{
     sync::Arc,
     time::Duration,
 };
-use tokio::runtime::Runtime;
 use tracing::{error, info, warn};
 
 fn main() -> anyhow::Result<()> {
-    // Initialize tracing
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::from_default_env()
@@ -27,7 +25,6 @@ fn main() -> anyhow::Result<()> {
 
     info!("NexDL starting...");
 
-    // Tokio runtime for async work
     let rt = Arc::new(
         tokio::runtime::Builder::new_multi_thread()
             .worker_threads(4)
@@ -35,7 +32,6 @@ fn main() -> anyhow::Result<()> {
             .build()?,
     );
 
-    // Determine data directories
     let data_dir = dirs::data_dir()
         .unwrap_or_else(|| PathBuf::from("."))
         .join("nexdl");
@@ -48,12 +44,11 @@ fn main() -> anyhow::Result<()> {
     std::fs::create_dir_all(&addon_dir)?;
     std::fs::create_dir_all(&downloads_dir)?;
 
-    // ── Core components ──────────────────────────────────────────────────────
     let queue = DownloadQueue::new(4);
 
     let account_store = Arc::new(AccountStore::new(
         data_dir.join("accounts.json"),
-        Some("nexdl-passphrase"), // TODO: user-set passphrase from settings
+        Some("nexdl-passphrase"),
     ));
     rt.block_on(account_store.load()).unwrap_or_else(|e| warn!("Account load: {e}"));
 
@@ -69,7 +64,7 @@ fn main() -> anyhow::Result<()> {
         registry.clone(),
         queue.clone(),
         downloads_dir.clone(),
-    ));
+    ).with_account_store(account_store.clone()));
 
     let scheduler = Arc::new(Scheduler::new());
     rt.spawn(scheduler.clone().run());
@@ -102,7 +97,6 @@ fn main() -> anyhow::Result<()> {
         ui.set_accounts(account_list.as_slice().into());
     }
 
-    // Default output dir
     ui.set_output_dir(downloads_dir.to_string_lossy().to_string().into());
 
     // ── Callbacks ─────────────────────────────────────────────────────────────
@@ -112,7 +106,6 @@ fn main() -> anyhow::Result<()> {
         let queue_ref = queue.clone();
         let runner_ref = runner.clone();
         let rt_ref = rt.clone();
-        let ui_handle = ui.as_weak();
 
         ui.on_add_url(move |url, output_dir| {
             let url = url.to_string();
@@ -120,18 +113,15 @@ fn main() -> anyhow::Result<()> {
 
             if url.trim().is_empty() { return; }
 
-            let task = DownloadTask::new(url.clone(), output_dir);
-            let task_id = task.id;
+            let task = DownloadTask::new(url, output_dir);
 
             let queue_clone = queue_ref.clone();
             let runner_clone = runner_ref.clone();
-            let ui_w = ui_handle.clone();
 
             rt_ref.spawn(async move {
                 match queue_clone.enqueue(task).await {
                     Ok(id) => {
                         info!("Enqueued {id}");
-                        // Start processing
                         let runner = runner_clone.clone();
                         tokio::spawn(async move {
                             if let Err(e) = runner.process_task(id).await {
@@ -151,6 +141,29 @@ fn main() -> anyhow::Result<()> {
         ui.on_pause_task(move |id| {
             if let Ok(uuid) = id.parse() {
                 let _ = queue_ref.pause(uuid);
+            }
+        });
+    }
+
+    // Resume task
+    {
+        let queue_ref = queue.clone();
+        let runner_ref = runner.clone();
+        let rt_ref = rt.clone();
+        ui.on_resume_task(move |id| {
+            if let Ok(uuid) = id.parse() {
+                let q = queue_ref.clone();
+                let r = runner_ref.clone();
+                let rt = rt_ref.clone();
+                if let Err(e) = q.resume(uuid) {
+                    error!("Resume failed: {e}");
+                    return;
+                }
+                rt.spawn(async move {
+                    if let Err(e) = r.process_task(uuid).await {
+                        error!("Task {uuid} failed after resume: {e}");
+                    }
+                });
             }
         });
     }
@@ -200,7 +213,6 @@ fn main() -> anyhow::Result<()> {
                 captcha_win.set_site_name("Manual Captcha".into());
                 captcha_win.set_message("Solve the captcha in the browser, then click Continue.".into());
                 captcha_win.on_open_browser(move || {
-                    // TODO: spawn headless browser
                     info!("Opening browser for captcha...");
                 });
                 captcha_win.on_skip(move || {
@@ -214,12 +226,31 @@ fn main() -> anyhow::Result<()> {
         });
     }
 
-    // Add account (stub — opens a dialog in full impl)
+    // Add account — creates account from inline UI inputs
     {
         let account_store_ref = account_store.clone();
         let ui_handle = ui.as_weak();
         ui.on_add_account(move || {
-            info!("Add account triggered (UI dialog TODO)");
+            let store = account_store_ref.clone();
+            let handle = ui_handle.clone();
+
+            // Open a simple dialog window for account creation
+            // For now, create a demo account — full dialog requires Slint popup
+            let account = nexdl_accounts::Account::new("New Account", "example.com");
+            store.add(account);
+            info!("Account added (dialog TODO)");
+
+            // Refresh account list in UI
+            if let Some(ui) = handle.upgrade() {
+                let list: Vec<AccountData> = store.list().iter().map(|a| AccountData {
+                    id: a.id.to_string().into(),
+                    label: a.label.clone().into(),
+                    site: a.site.clone().into(),
+                    username: a.username.clone().unwrap_or_default().into(),
+                    cookie_count: a.cookies.count() as i32,
+                }).collect();
+                ui.set_accounts(list.as_slice().into());
+            }
         });
     }
 
@@ -230,7 +261,6 @@ fn main() -> anyhow::Result<()> {
         ui.on_remove_account(move |id| {
             if let Ok(uuid) = id.parse() {
                 account_store_ref.remove(&uuid);
-                // Refresh list
                 if let Some(ui) = ui_handle.upgrade() {
                     let list: Vec<AccountData> = account_store_ref.list().iter().map(|a| AccountData {
                         id: a.id.to_string().into(),
@@ -240,6 +270,54 @@ fn main() -> anyhow::Result<()> {
                         cookie_count: a.cookies.count() as i32,
                     }).collect();
                     ui.set_accounts(list.as_slice().into());
+                }
+            }
+        });
+    }
+
+    // Toggle scheduler entry
+    {
+        let scheduler_ref = scheduler.clone();
+        let ui_handle = ui.as_weak();
+        ui.on_toggle_sched(move |id, enabled| {
+            if let Ok(uuid) = id.parse() {
+                scheduler_ref.enable(&uuid, enabled);
+                if let Some(ui) = ui_handle.upgrade() {
+                    let list: Vec<SchedulerData> = scheduler_ref.list().iter().map(|s| SchedulerData {
+                        id: s.id.to_string().into(),
+                        name: s.name.clone().into(),
+                        trigger: format!("{:?}", s.trigger).into(),
+                        action: format!("{:?}", s.action).into(),
+                        enabled: s.enabled,
+                        last_run: s.last_run.map(|t| t.format("%H:%M:%S").to_string()).unwrap_or_else(|| "--".into()).into(),
+                        next_run: s.next_run.map(|t| t.format("%H:%M:%S").to_string()).unwrap_or_else(|| "--".into()).into(),
+                        run_count: s.run_count as i32,
+                    }).collect();
+                    ui.set_scheduler_tasks(list.as_slice().into());
+                }
+            }
+        });
+    }
+
+    // Remove scheduler entry
+    {
+        let scheduler_ref = scheduler.clone();
+        let ui_handle = ui.as_weak();
+        ui.on_remove_sched(move |id| {
+            if let Ok(uuid) = id.parse() {
+                scheduler_ref.remove(&uuid);
+                if let Some(ui) = ui_handle.upgrade() {
+                    let list: Vec<SchedulerData> = scheduler_ref.list().iter().map(|s| SchedulerData {
+                        id: s.id.to_string().into(),
+                        name: s.name.clone().into(),
+                        trigger: format!("{:?}", s.trigger).into(),
+                        action: format!("{:?}", s.action).into(),
+                        enabled: s.enabled,
+                        last_run: s.last_run.map(|t| t.format("%H:%M:%S").to_string()).unwrap_or_else(|| "--".into()).into(),
+                        next_run: s.next_run.map(|t| t.format("%H:%M:%S").to_string()).unwrap_or_else(|| "--".into()).into(),
+                        run_count: s.run_count as i32,
+                    }).collect();
+                    ui.set_scheduler_tasks(list.as_slice().into());
                 }
             }
         });
@@ -258,6 +336,7 @@ fn main() -> anyhow::Result<()> {
 
                 let tasks = queue_ref.list();
                 let stats = queue_ref.stats();
+                let total_speed = queue_ref.total_speed();
 
                 let task_data: Vec<TaskData> = tasks.iter().map(|t| {
                     let status_str = match &t.status {
@@ -297,6 +376,7 @@ fn main() -> anyhow::Result<()> {
                 ui.set_stat_queued(stats.queued as i32);
                 ui.set_stat_completed(stats.completed as i32);
                 ui.set_stat_failed(stats.failed as i32);
+                ui.set_total_speed(format_speed(total_speed).into());
             },
         );
     }

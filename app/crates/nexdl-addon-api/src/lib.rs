@@ -1,10 +1,14 @@
 pub mod python_types;
 pub mod registry;
 pub mod runner;
+pub mod ui_types;
+pub mod py_ui;
 
 pub use python_types::*;
 pub use registry::{AddonRegistry, AddonInfo};
 pub use runner::AddonRunner;
+pub use ui_types::*;
+pub use py_ui::*;
 
 #[derive(Debug, thiserror::Error)]
 pub enum AddonApiError {

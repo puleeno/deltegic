@@ -3,7 +3,7 @@ use dashmap::DashMap;
 use pyo3::prelude::*;
 use pyo3::types::PyModule;
 use std::{path::PathBuf, sync::Arc};
-use tracing::{error, info, warn};
+use tracing::{error, info};
 
 /// Metadata about a loaded addon
 #[derive(Debug, Clone)]

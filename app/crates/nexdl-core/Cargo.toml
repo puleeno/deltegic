@@ -5,6 +5,7 @@ edition.workspace = true
 
 [dependencies]
 tokio = { workspace = true }
+tokio-util = "0.7"
 futures = { workspace = true }
 async-channel = { workspace = true }
 serde = { workspace = true }

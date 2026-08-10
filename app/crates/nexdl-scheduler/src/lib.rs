@@ -3,7 +3,7 @@ use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::broadcast;
-use tracing::{debug, info, warn};
+use tracing::info;
 use uuid::Uuid;
 
 pub type ScheduleId = Uuid;
@@ -96,7 +96,7 @@ impl ScheduleEntry {
                 let base = last.unwrap_or(now);
                 Some(base + Duration::seconds(*seconds as i64))
             }
-            TriggerSpec::Cron { expression } => {
+            TriggerSpec::Cron { expression: _ } => {
                 // Simple cron: next_minute for now, full cron needs a library
                 Some(now + Duration::minutes(1))
             }

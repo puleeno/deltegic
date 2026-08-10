@@ -407,6 +407,17 @@ export struct AccountData {
     cookie-count: int,
 }
 
+export struct SchedulerData {
+    id: string,
+    name: string,
+    trigger: string,
+    action: string,
+    enabled: bool,
+    last-run: string,
+    next-run: string,
+    run-count: int,
+}
+
 // ─── Main Window ─────────────────────────────────────────────────────────────
 export component MainWindow inherits Window {
     title: "NexDL — Download Manager";
@@ -420,6 +431,7 @@ export component MainWindow inherits Window {
     in-out property <[TaskData]> tasks;
     in-out property <[AddonData]> addons;
     in-out property <[AccountData]> accounts;
+    in-out property <[SchedulerData]> scheduler-tasks;
     in-out property <string> active-page: "downloads";
     in-out property <string> add-url-text;
     in-out property <string> output-dir: "~/Downloads/NexDL";
@@ -441,6 +453,8 @@ export component MainWindow inherits Window {
     callback add-account();
     callback remove-account(string);
     callback open-output-dir(string);
+    callback toggle-sched(string, bool);
+    callback remove-sched(string);
 
     HorizontalLayout {
         // Sidebar
@@ -536,6 +550,8 @@ export component MainWindow inherits Window {
             if active-page == "addons": VerticalLayout {
                 spacing: 12px;
                 padding: 16px;
+                horizontal-stretch: 1;
+                vertical-stretch: 1;
 
                 HorizontalLayout {
                     spacing: 8px;
@@ -545,44 +561,69 @@ export component MainWindow inherits Window {
                     Button { text: "↺ Reload All"; width: 120px; }
                 }
 
-                for addon in addons: Rectangle {
-                    height: 80px;
-                    background: Theme.bg-card.with-alpha(0.3);
-                    border-radius: 8px;
-                    border-color: Theme.border;
-                    border-width: 1px;
+                if addons.length == 0: VerticalLayout {
+                    alignment: center;
+                    padding: 80px;
+                    Text {
+                        text: "No addons loaded";
+                        color: Theme.text-dim;
+                        font-size: 18px;
+                        horizontal-alignment: center;
+                    }
+                    Text {
+                        text: "Place addon folders in ~/.local/share/nexdl/addons/";
+                        color: Theme.text-dim;
+                        font-size: 13px;
+                        horizontal-alignment: center;
+                    }
+                }
 
-                    HorizontalLayout {
-                        padding: 12px;
-                        spacing: 12px;
-                        alignment: stretch;
+                ScrollView {
+                    vertical-stretch: 1;
+                    VerticalLayout {
+                        spacing: 6px;
+                        alignment: start;
 
-                        VerticalLayout {
-                            spacing: 4px;
-                            horizontal-stretch: 1;
+                        for addon in addons: Rectangle {
+                            height: 80px;
+                            background: Theme.bg-card.with-alpha(0.3);
+                            border-radius: 8px;
+                            border-color: Theme.border;
+                            border-width: 1px;
+
                             HorizontalLayout {
-                                spacing: 8px;
-                                Text { text: addon.name; color: Theme.text; font-size: 14px; font-weight: 700; vertical-alignment: center; }
-                                Text { text: "v" + addon.version; color: Theme.text-dim; font-size: 12px; vertical-alignment: center; }
-                            }
-                            Text { text: addon.description; color: Theme.text-dim; font-size: 12px; }
-                            Text { text: "Sites: " + addon.sites; color: Theme.accent2; font-size: 11px; }
-                        }
+                                padding: 12px;
+                                spacing: 12px;
+                                alignment: stretch;
 
-                        VerticalLayout {
-                            alignment: center;
-                            spacing: 6px;
-                            width: 140px;
+                                VerticalLayout {
+                                    spacing: 4px;
+                                    horizontal-stretch: 1;
+                                    HorizontalLayout {
+                                        spacing: 8px;
+                                        Text { text: addon.name; color: Theme.text; font-size: 14px; font-weight: 700; vertical-alignment: center; }
+                                        Text { text: "v" + addon.version; color: Theme.text-dim; font-size: 12px; vertical-alignment: center; }
+                                    }
+                                    Text { text: addon.description; color: Theme.text-dim; font-size: 12px; }
+                                    Text { text: "Sites: " + addon.sites; color: Theme.accent2; font-size: 11px; }
+                                }
 
-                            CheckBox {
-                                text: "Enabled";
-                                checked: addon.enabled;
-                                toggled => { toggle-addon(addon.name, self.checked); }
-                            }
-                            Button {
-                                text: "Reload";
-                                height: 28px;
-                                clicked => { reload-addon(addon.name); }
+                                VerticalLayout {
+                                    alignment: center;
+                                    spacing: 6px;
+                                    width: 140px;
+
+                                    CheckBox {
+                                        text: "Enabled";
+                                        checked: addon.enabled;
+                                        toggled => { toggle-addon(addon.name, self.checked); }
+                                    }
+                                    Button {
+                                        text: "Reload";
+                                        height: 28px;
+                                        clicked => { reload-addon(addon.name); }
+                                    }
+                                }
                             }
                         }
                     }
@@ -593,6 +634,8 @@ export component MainWindow inherits Window {
             if active-page == "accounts": VerticalLayout {
                 spacing: 12px;
                 padding: 16px;
+                horizontal-stretch: 1;
+                vertical-stretch: 1;
 
                 HorizontalLayout {
                     spacing: 8px;
@@ -605,69 +648,93 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                for account in accounts: Rectangle {
-                    height: 72px;
-                    background: Theme.bg-card.with-alpha(0.3);
-                    border-radius: 8px;
-                    border-color: Theme.border;
-                    border-width: 1px;
+                if accounts.length == 0: VerticalLayout {
+                    alignment: center;
+                    padding: 80px;
+                    Text {
+                        text: "No accounts";
+                        color: Theme.text-dim;
+                        font-size: 18px;
+                        horizontal-alignment: center;
+                    }
+                    Text {
+                        text: "Add accounts to auto-inject cookies for downloads";
+                        color: Theme.text-dim;
+                        font-size: 13px;
+                        horizontal-alignment: center;
+                    }
+                }
 
-                    HorizontalLayout {
-                        padding: 12px;
-                        spacing: 12px;
-                        alignment: stretch;
+                ScrollView {
+                    vertical-stretch: 1;
+                    VerticalLayout {
+                        spacing: 6px;
+                        alignment: start;
 
-                        // Icon
-                        Rectangle {
-                            width: 40px;
-                            height: 40px;
-                            background: Theme.accent2;
-                            border-radius: 20px;
-                            Text {
-                                text: "●";
-                                color: white;
-                                font-size: 18px;
-                                font-weight: 700;
-                                horizontal-alignment: center;
-                                vertical-alignment: center;
-                            }
-                        }
+                        for account in accounts: Rectangle {
+                            height: 72px;
+                            background: Theme.bg-card.with-alpha(0.3);
+                            border-radius: 8px;
+                            border-color: Theme.border;
+                            border-width: 1px;
 
-                        VerticalLayout {
-                            spacing: 4px;
-                            horizontal-stretch: 1;
-                            alignment: center;
                             HorizontalLayout {
-                                spacing: 8px;
-                                Text { text: account.label; color: Theme.text; font-size: 14px; font-weight: 600; vertical-alignment: center; }
-                                Rectangle {
-                                    background: Theme.bg-panel;
-                                    border-radius: 4px;
-                                    width: 90px;
-                                    height: 20px;
-                                    Text { text: account.site; color: Theme.accent; font-size: 11px; horizontal-alignment: center; vertical-alignment: center; }
-                                }
-                            }
-                            Text {
-                                text: account.username != "" ? "@" + account.username : "(no username)";
-                                color: Theme.text-dim;
-                                font-size: 12px;
-                            }
-                        }
+                                padding: 12px;
+                                spacing: 12px;
+                                alignment: stretch;
 
-                        VerticalLayout {
-                            alignment: center;
-                            width: 80px;
-                            Text {
-                                text: account.cookie-count + " cookies";
-                                color: account.cookie-count > 0 ? Theme.success : Theme.text-dim;
-                                font-size: 12px;
-                                horizontal-alignment: center;
-                            }
-                            Button {
-                                text: "Remove";
-                                height: 28px;
-                                clicked => { remove-account(account.id); }
+                                Rectangle {
+                                    width: 40px;
+                                    height: 40px;
+                                    background: Theme.accent2;
+                                    border-radius: 20px;
+                                    Text {
+                                        text: "●";
+                                        color: white;
+                                        font-size: 18px;
+                                        font-weight: 700;
+                                        horizontal-alignment: center;
+                                        vertical-alignment: center;
+                                    }
+                                }
+
+                                VerticalLayout {
+                                    spacing: 4px;
+                                    horizontal-stretch: 1;
+                                    alignment: center;
+                                    HorizontalLayout {
+                                        spacing: 8px;
+                                        Text { text: account.label; color: Theme.text; font-size: 14px; font-weight: 600; vertical-alignment: center; }
+                                        Rectangle {
+                                            background: Theme.bg-panel;
+                                            border-radius: 4px;
+                                            width: 90px;
+                                            height: 20px;
+                                            Text { text: account.site; color: Theme.accent; font-size: 11px; horizontal-alignment: center; vertical-alignment: center; }
+                                        }
+                                    }
+                                    Text {
+                                        text: account.username != "" ? "@" + account.username : "(no username)";
+                                        color: Theme.text-dim;
+                                        font-size: 12px;
+                                    }
+                                }
+
+                                VerticalLayout {
+                                    alignment: center;
+                                    width: 80px;
+                                    Text {
+                                        text: account.cookie-count + " cookies";
+                                        color: account.cookie-count > 0 ? Theme.success : Theme.text-dim;
+                                        font-size: 12px;
+                                        horizontal-alignment: center;
+                                    }
+                                    Button {
+                                        text: "Remove";
+                                        height: 28px;
+                                        clicked => { remove-account(account.id); }
+                                    }
+                                }
                             }
                         }
                     }
@@ -678,40 +745,235 @@ export component MainWindow inherits Window {
             if active-page == "scheduler": VerticalLayout {
                 spacing: 12px;
                 padding: 16px;
+                horizontal-stretch: 1;
+                vertical-stretch: 1;
 
-                Text { text: "Scheduler"; color: Theme.text; font-size: 20px; font-weight: 700; }
+                HorizontalLayout {
+                    spacing: 8px;
+                    Text { text: "Scheduler"; color: Theme.text; font-size: 20px; font-weight: 700; vertical-alignment: center; }
+                    Rectangle { horizontal-stretch: 1; }
+                    Button {
+                        text: "+ New Scheduled Task";
+                        width: 200px;
+                    }
+                }
+
                 Text {
                     text: "Automate downloads, reups, and addon tasks on a schedule.";
                     color: Theme.text-dim;
                     font-size: 13px;
                 }
-                Button { text: "+ New Scheduled Task"; width: 200px; }
+
+                Rectangle { height: 4px; }
+
+                if scheduler-tasks.length == 0: VerticalLayout {
+                    alignment: center;
+                    padding: 80px;
+                    Text {
+                        text: "No scheduled tasks";
+                        color: Theme.text-dim;
+                        font-size: 18px;
+                        horizontal-alignment: center;
+                    }
+                    Text {
+                        text: "Click \"New Scheduled Task\" to create one";
+                        color: Theme.text-dim;
+                        font-size: 13px;
+                        horizontal-alignment: center;
+                    }
+                }
+
+                ScrollView {
+                    vertical-stretch: 1;
+                    VerticalLayout {
+                        spacing: 6px;
+                        alignment: start;
+
+                        for sched in scheduler-tasks: Rectangle {
+                            height: 72px;
+                            background: Theme.bg-card.with-alpha(0.3);
+                            border-radius: 8px;
+                            border-color: Theme.border;
+                            border-width: 1px;
+
+                            HorizontalLayout {
+                                padding: 12px;
+                                spacing: 12px;
+                                alignment: stretch;
+
+                                VerticalLayout {
+                                    spacing: 4px;
+                                    horizontal-stretch: 1;
+                                    alignment: center;
+                                    HorizontalLayout {
+                                        spacing: 8px;
+                                        Text { text: sched.name; color: Theme.text; font-size: 14px; font-weight: 600; vertical-alignment: center; }
+                                        Rectangle {
+                                            background: Theme.bg-panel;
+                                            border-radius: 4px;
+                                            width: 90px;
+                                            height: 20px;
+                                            Text { text: sched.trigger; color: Theme.accent2; font-size: 11px; horizontal-alignment: center; vertical-alignment: center; }
+                                        }
+                                    }
+                                    Text {
+                                        text: sched.action;
+                                        color: Theme.text-dim;
+                                        font-size: 12px;
+                                    }
+                                    HorizontalLayout {
+                                        spacing: 12px;
+                                        Text { text: "Last: " + sched.last-run; color: Theme.text-dim; font-size: 11px; vertical-alignment: center; }
+                                        Text { text: "Next: " + sched.next-run; color: Theme.text-dim; font-size: 11px; vertical-alignment: center; }
+                                        Text { text: "Runs: " + sched.run-count; color: Theme.text-dim; font-size: 11px; vertical-alignment: center; }
+                                    }
+                                }
+
+                                VerticalLayout {
+                                    alignment: center;
+                                    width: 80px;
+                                    spacing: 4px;
+                                    Rectangle {
+                                        width: 50px;
+                                        height: 24px;
+                                        border-radius: 12px;
+                                        background: sched.enabled ? Theme.success.with-alpha(0.2) : Theme.text-dim.with-alpha(0.2);
+                                        border-color: sched.enabled ? Theme.success : Theme.text-dim;
+                                        border-width: 1px;
+                                        TouchArea {
+                                            clicked => { toggle-sched(sched.id, !sched.enabled); }
+                                        }
+                                        Text {
+                                            text: sched.enabled ? "ON" : "OFF";
+                                            color: sched.enabled ? Theme.success : Theme.text-dim;
+                                            font-size: 11px;
+                                            font-weight: 600;
+                                            horizontal-alignment: center;
+                                            vertical-alignment: center;
+                                        }
+                                    }
+                                    Button {
+                                        text: "Delete";
+                                        height: 28px;
+                                        clicked => { remove-sched(sched.id); }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
 
             // ── Settings Page ──
             if active-page == "settings": VerticalLayout {
                 spacing: 16px;
                 padding: 16px;
+                horizontal-stretch: 1;
+                vertical-stretch: 1;
 
                 Text { text: "Settings"; color: Theme.text; font-size: 20px; font-weight: 700; }
 
-                Rectangle {
-                    background: Theme.bg-card.with-alpha(0.3);
-                    border-radius: 8px;
-                    border-color: Theme.border;
-                    border-width: 1px;
-                    height: 60px;
-
-                    HorizontalLayout {
-                        padding: 16px;
+                ScrollView {
+                    vertical-stretch: 1;
+                    VerticalLayout {
                         spacing: 12px;
-                        alignment: stretch;
-                        Text { text: "Default Download Directory"; color: Theme.text; font-size: 13px; vertical-alignment: center; horizontal-stretch: 0; }
-                        LineEdit {
-                            text <=> output-dir;
-                            horizontal-stretch: 1;
+                        alignment: start;
+
+                        // Download Directory
+                        Rectangle {
+                            background: Theme.bg-card.with-alpha(0.3);
+                            border-radius: 8px;
+                            border-color: Theme.border;
+                            border-width: 1px;
+                            height: 60px;
+                            HorizontalLayout {
+                                padding: 16px;
+                                spacing: 12px;
+                                alignment: stretch;
+                                Text { text: "Default Download Directory"; color: Theme.text; font-size: 13px; vertical-alignment: center; horizontal-stretch: 0; }
+                                LineEdit {
+                                    text <=> output-dir;
+                                    horizontal-stretch: 1;
+                                }
+                                Button { text: "Browse"; width: 80px; }
+                            }
                         }
-                        Button { text: "Browse"; width: 80px; }
+
+                        // Max Concurrency
+                        Rectangle {
+                            background: Theme.bg-card.with-alpha(0.3);
+                            border-radius: 8px;
+                            border-color: Theme.border;
+                            border-width: 1px;
+                            height: 60px;
+                            HorizontalLayout {
+                                padding: 16px;
+                                spacing: 12px;
+                                alignment: stretch;
+                                Text { text: "Max Concurrent Downloads"; color: Theme.text; font-size: 13px; vertical-alignment: center; horizontal-stretch: 0; }
+                                LineEdit {
+                                    text: "4";
+                                    horizontal-stretch: 1;
+                                }
+                            }
+                        }
+
+                        // User Agent
+                        Rectangle {
+                            background: Theme.bg-card.with-alpha(0.3);
+                            border-radius: 8px;
+                            border-color: Theme.border;
+                            border-width: 1px;
+                            height: 60px;
+                            HorizontalLayout {
+                                padding: 16px;
+                                spacing: 12px;
+                                alignment: stretch;
+                                Text { text: "User Agent"; color: Theme.text; font-size: 13px; vertical-alignment: center; horizontal-stretch: 0; }
+                                LineEdit {
+                                    text: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36";
+                                    horizontal-stretch: 1;
+                                }
+                            }
+                        }
+
+                        // Proxy
+                        Rectangle {
+                            background: Theme.bg-card.with-alpha(0.3);
+                            border-radius: 8px;
+                            border-color: Theme.border;
+                            border-width: 1px;
+                            height: 60px;
+                            HorizontalLayout {
+                                padding: 16px;
+                                spacing: 12px;
+                                alignment: stretch;
+                                Text { text: "HTTP Proxy (optional)"; color: Theme.text; font-size: 13px; vertical-alignment: center; horizontal-stretch: 0; }
+                                LineEdit {
+                                    placeholder-text: "http://127.0.0.1:8080";
+                                    horizontal-stretch: 1;
+                                }
+                            }
+                        }
+
+                        // Encryption Passphrase
+                        Rectangle {
+                            background: Theme.bg-card.with-alpha(0.3);
+                            border-radius: 8px;
+                            border-color: Theme.border;
+                            border-width: 1px;
+                            height: 60px;
+                            HorizontalLayout {
+                                padding: 16px;
+                                spacing: 12px;
+                                alignment: stretch;
+                                Text { text: "Encryption Passphrase"; color: Theme.text; font-size: 13px; vertical-alignment: center; horizontal-stretch: 0; }
+                                LineEdit {
+                                    placeholder-text: "Enter passphrase for account encryption";
+                                    horizontal-stretch: 1;
+                                }
+                            }
+                        }
                     }
                 }
             }
