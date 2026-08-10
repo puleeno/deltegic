@@ -1,14 +1,14 @@
 slint::include_modules!();
 
-use nexdl_addon_api::{AddonRegistry, AddonRunner};
-use nexdl_accounts::AccountStore;
-use nexdl_core::{
+use deltegic_addon_api::{AddonRegistry, AddonRunner};
+use deltegic_accounts::AccountStore;
+use deltegic_core::{
     task::{DownloadTask, TaskStatus},
     DownloadQueue,
 };
-use nexdl_scheduler::Scheduler;
+use deltegic_scheduler::Scheduler;
 use std::{
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::Arc,
     time::Duration,
 };
@@ -18,12 +18,12 @@ fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::from_default_env()
-                .add_directive("nexdl=debug".parse()?)
+                .add_directive("deltegic=debug".parse()?)
                 .add_directive("warn".parse()?),
         )
         .init();
 
-    info!("NexDL starting...");
+    info!("Deltegic starting...");
 
     let rt = Arc::new(
         tokio::runtime::Builder::new_multi_thread()
@@ -32,13 +32,40 @@ fn main() -> anyhow::Result<()> {
             .build()?,
     );
 
+    let exe_dir = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|p| p.to_path_buf()))
+        .unwrap_or_else(|| PathBuf::from("."));
+
     let data_dir = dirs::data_dir()
         .unwrap_or_else(|| PathBuf::from("."))
-        .join("nexdl");
-    let addon_dir = data_dir.join("addons");
+        .join("deltegic");
+
+    let addon_dir = {
+        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let c_source = manifest_dir.parent().and_then(|p| p.parent()).unwrap_or(Path::new(".")).join("addons");
+        let c1 = exe_dir.join("addons");
+        let c2 = exe_dir.parent().unwrap_or(&exe_dir).join("addons");
+        let c3 = std::env::current_dir().unwrap_or_default().join("addons");
+        // Prefer the source addons dir (has actual .py files) over empty dirs
+        fn has_addons(p: &Path) -> bool {
+            p.exists() && std::fs::read_dir(p).ok().map(|entries| {
+                entries.filter_map(|e| e.ok()).any(|e| {
+                    let path = e.path();
+                    (path.is_dir() && path.join("__init__.py").exists())
+                        || (path.is_file() && path.extension().map(|e| e == "py").unwrap_or(false))
+                })
+            }).unwrap_or(false)
+        }
+        if has_addons(&c_source) { c_source }
+        else if has_addons(&c1) { c1 }
+        else if has_addons(&c2) { c2 }
+        else if has_addons(&c3) { c3 }
+        else { c_source }
+    };
     let downloads_dir = dirs::download_dir()
         .unwrap_or_else(|| PathBuf::from("Downloads"))
-        .join("NexDL");
+        .join("Deltegic");
 
     std::fs::create_dir_all(&data_dir)?;
     std::fs::create_dir_all(&addon_dir)?;
@@ -48,7 +75,7 @@ fn main() -> anyhow::Result<()> {
 
     let account_store = Arc::new(AccountStore::new(
         data_dir.join("accounts.json"),
-        Some("nexdl-passphrase"),
+        Some("deltegic-passphrase"),
     ));
     rt.block_on(account_store.load()).unwrap_or_else(|e| warn!("Account load: {e}"));
 
@@ -236,7 +263,7 @@ fn main() -> anyhow::Result<()> {
 
             // Open a simple dialog window for account creation
             // For now, create a demo account — full dialog requires Slint popup
-            let account = nexdl_accounts::Account::new("New Account", "example.com");
+            let account = deltegic_accounts::Account::new("New Account", "example.com");
             store.add(account);
             info!("Account added (dialog TODO)");
 
@@ -323,8 +350,53 @@ fn main() -> anyhow::Result<()> {
         });
     }
 
-    // ── Queue → UI sync timer ─────────────────────────────────────────────────
+    // Select task (show log)
     {
+        let queue_ref = queue.clone();
+        let ui_handle = ui.as_weak();
+        ui.on_select_task(move |id| {
+            if let Some(ui) = ui_handle.upgrade() {
+                let tasks = queue_ref.list();
+                if let Some(task) = tasks.iter().find(|t| id == t.id.to_string()) {
+                    let mut log_lines = Vec::new();
+                    log_lines.push(format!("URL: {}", task.url));
+                    if let Some(addon) = &task.addon {
+                        log_lines.push(format!("Addon: {} v{}", addon.name, addon.version));
+                    }
+                    if !task.progress.message.is_empty() {
+                        log_lines.push(format!("Info: {}", task.progress.message));
+                    }
+                    log_lines.push(format!("Downloaded: {} / {}", task.progress.downloaded, task.progress.total));
+                    match &task.status {
+                        TaskStatus::Downloading => {
+                            log_lines.push("Status: Downloading...".to_string());
+                        }
+                        TaskStatus::Completed { output_path } => {
+                            log_lines.push(format!("Status: Completed → {}", output_path));
+                        }
+                        TaskStatus::Failed { error, retries } => {
+                            log_lines.push(format!("Status: FAILED — {} ({} retries)", error, retries));
+                        }
+                        TaskStatus::Paused => {
+                            log_lines.push("Status: Paused".to_string());
+                        }
+                        TaskStatus::Cancelled => {
+                            log_lines.push("Status: Cancelled".to_string());
+                        }
+                        s => {
+                            log_lines.push(format!("Status: {:?}", s));
+                        }
+                    }
+                    let log_text = log_lines.join("\n");
+                    ui.set_selected_task_log(log_text.into());
+                }
+            }
+        });
+    }
+
+    // ── Queue → UI sync timer ─────────────────────────────────────────────────
+    // IMPORTANT: timer must live until after ui.run() or it gets dropped
+    let _sync_timer = {
         let queue_ref = queue.clone();
         let ui_handle = ui.as_weak();
 
@@ -356,6 +428,13 @@ fn main() -> anyhow::Result<()> {
                         .map(format_eta)
                         .unwrap_or_else(|| "--".to_string());
 
+                    let message = t.progress.message.clone();
+
+                    let error = match &t.status {
+                        TaskStatus::Failed { error, .. } => error.clone(),
+                        _ => String::new(),
+                    };
+
                     TaskData {
                         id: t.id.to_string().into(),
                         title: t.title.clone().unwrap_or_default().into(),
@@ -368,6 +447,8 @@ fn main() -> anyhow::Result<()> {
                             .map(|a| a.name.clone())
                             .unwrap_or_default()
                             .into(),
+                        message: message.into(),
+                        error: error.into(),
                     }
                 }).collect();
 
@@ -379,7 +460,7 @@ fn main() -> anyhow::Result<()> {
                 ui.set_total_speed(format_speed(total_speed).into());
             },
         );
-    }
+    };
 
     ui.run()?;
     Ok(())

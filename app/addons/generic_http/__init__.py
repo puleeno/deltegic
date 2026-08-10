@@ -4,7 +4,7 @@ Handles direct file URLs — any URL pointing to a downloadable file.
 This is the fallback addon that handles URLs no other addon claims.
 """
 import re
-import nexdl
+import deltegic
 
 DOWNLOADABLE_EXTENSIONS = {
     '.mp4', '.mkv', '.avi', '.mov', '.webm', '.flv', '.wmv',
@@ -16,7 +16,7 @@ DOWNLOADABLE_EXTENSIONS = {
 }
 
 
-class GenericHttpAddon(nexdl.Addon):
+class GenericHttpAddon(deltegic.Addon):
 
     def name(self) -> str:
         return "generic-http"
@@ -38,11 +38,11 @@ class GenericHttpAddon(nexdl.Addon):
         path = url.split("?")[0].lower()
         return any(path.endswith(ext) for ext in DOWNLOADABLE_EXTENSIONS)
 
-    def extract(self, ctx: nexdl.Context) -> list[nexdl.DownloadItem]:
+    def extract(self, ctx: deltegic.Context) -> list[deltegic.DownloadItem]:
         url = ctx.url
         filename = url.split("/")[-1].split("?")[0] or "download"
 
-        item = nexdl.DownloadItem(
+        item = deltegic.DownloadItem(
             url=url,
             title=filename,
             filename=filename,

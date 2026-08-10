@@ -1,10 +1,10 @@
 [package]
-name = "nexdl-accounts"
+name = "deltegic-accounts"
 version.workspace = true
 edition.workspace = true
 
 [dependencies]
-nexdl-core = { workspace = true }
+deltegic-core = { workspace = true }
 tokio = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -13,13 +13,10 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 uuid = { workspace = true }
 chrono = { workspace = true }
+dashmap = { workspace = true }
 aes-gcm = { workspace = true }
 sha2 = { workspace = true }
 hex = { workspace = true }
 rand = { workspace = true }
-dirs = { workspace = true }
-toml = { workspace = true }
-parking_lot = { workspace = true }
-dashmap = { workspace = true }
 url = { workspace = true }
 regex = { workspace = true }

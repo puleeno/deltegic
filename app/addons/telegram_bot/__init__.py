@@ -9,10 +9,10 @@ Usage as a scheduled addon (not a URL handler):
 """
 import re
 import os
-import nexdl
+import deltegic
 
 
-class TelegramBotAddon(nexdl.Addon):
+class TelegramBotAddon(deltegic.Addon):
 
     def name(self) -> str:
         return "telegram-bot"
@@ -32,7 +32,7 @@ class TelegramBotAddon(nexdl.Addon):
     def can_handle(self, url: str) -> bool:
         return False  # We're a bot addon, not a URL handler
 
-    def run_bot(self, ctx: nexdl.Context) -> None:
+    def run_bot(self, ctx: deltegic.Context) -> None:
         """Start the Telegram bot polling loop.
         Called by the scheduler or manually via RunAddon action.
         """
@@ -62,7 +62,7 @@ class TelegramBotAddon(nexdl.Addon):
                 import time
                 time.sleep(5)
 
-    def _handle_update(self, update: dict, token: str, ctx: nexdl.Context) -> None:
+    def _handle_update(self, update: dict, token: str, ctx: deltegic.Context) -> None:
         message = update.get("message", {})
         chat_id = message.get("chat", {}).get("id")
         text = message.get("text", "").strip()

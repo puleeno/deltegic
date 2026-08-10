@@ -1,9 +1,9 @@
-use crate::{python_types::create_nexdl_module, AddonApiError, Result};
+use crate::{python_types::create_deltegic_module, AddonApiError, Result};
 use dashmap::DashMap;
 use pyo3::prelude::*;
 use pyo3::types::PyModule;
 use std::{path::PathBuf, sync::Arc};
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 /// Metadata about a loaded addon
 #[derive(Debug, Clone)]
@@ -34,7 +34,7 @@ impl AddonRegistry {
         }
     }
 
-    /// Initialize Python interpreter and register the `nexdl` built-in module
+    /// Initialize Python interpreter and register the `deltegic` built-in module
     pub fn init_python(&self) -> Result<()> {
         Python::with_gil(|py| {
             // Add addon dir to sys.path
@@ -43,12 +43,12 @@ impl AddonRegistry {
             let addon_path = self.addon_dir.to_str().unwrap_or(".");
             path.call_method1("insert", (0, addon_path))?;
 
-            // Register built-in nexdl module
-            let nexdl_mod = create_nexdl_module(py)?;
+            // Register built-in deltegic module
+            let deltegic_mod = create_deltegic_module(py)?;
             let modules = sys.getattr("modules")?;
-            modules.set_item("nexdl", nexdl_mod)?;
+            modules.set_item("deltegic", deltegic_mod)?;
 
-            info!("Python {} initialized, nexdl module registered", py.version());
+            info!("Python {} initialized, deltegic module registered", py.version());
             Ok(())
         }).map_err(|e: PyErr| AddonApiError::Python(e.to_string()))
     }
@@ -95,14 +95,14 @@ impl AddonRegistry {
                     format!("Import '{}': {}", module_name, e)
                 ))?;
 
-            // Get nexdl.Addon base class
-            let nexdl = py.import_bound("nexdl")?;
-            let addon_base = nexdl.getattr("Addon")?;
+            // Get deltegic.Addon base class
+            let deltegic = py.import_bound("deltegic")?;
+            let addon_base = deltegic.getattr("Addon")?;
 
-            // Find addon class (subclass of nexdl.Addon)
+            // Find addon class (subclass of deltegic.Addon)
             let addon_class = self.find_addon_class(py, &module, &addon_base)
                 .ok_or_else(|| PyErr::new::<pyo3::exceptions::PyTypeError, _>(
-                    format!("No nexdl.Addon subclass found in '{}'", module_name)
+                    format!("No deltegic.Addon subclass found in '{}'", module_name)
                 ))?;
 
             // Instantiate to get metadata
@@ -124,20 +124,38 @@ impl AddonRegistry {
     /// Find which addon can handle a URL
     pub fn find_for_url(&self, url: &str) -> Option<String> {
         Python::with_gil(|py| {
+            info!("find_for_url: checking {} addons for URL: {}", self.classes.len(), url);
             for entry in self.classes.iter() {
                 let name = entry.key().clone();
                 if let Some(info) = self.addons.get(&name) {
-                    if !info.enabled { continue; }
+                    if !info.enabled {
+                        info!("  addon '{}' is disabled, skipping", name);
+                        continue;
+                    }
                 }
                 let class = entry.value().bind(py);
-                if let Ok(instance) = class.call0() {
-                    if let Ok(result) = instance.call_method1("can_handle", (url,)) {
-                        if result.is_truthy().unwrap_or(false) {
-                            return Some(name);
+                match class.call0() {
+                    Ok(instance) => {
+                        match instance.call_method1("can_handle", (url,)) {
+                            Ok(result) => {
+                                let truthy = result.is_truthy().unwrap_or(false);
+                                info!("  addon '{}' can_handle returned: {}", name, truthy);
+                                if truthy {
+                                    info!("URL matched addon: {}", name);
+                                    return Some(name);
+                                }
+                            }
+                            Err(e) => {
+                                warn!("Addon '{}' can_handle error: {}", name, e);
+                            }
                         }
+                    }
+                    Err(e) => {
+                        warn!("Addon '{}' instantiation error: {}", name, e);
                     }
                 }
             }
+            warn!("No addon matched URL: {}", url);
             None
         })
     }

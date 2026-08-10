@@ -1,17 +1,17 @@
-//! PyO3 bindings — the `nexdl` Python module exposed to addon authors.
+//! PyO3 bindings — the `deltegic` Python module exposed to addon authors.
 //!
 //! Python addon API:
 //!
 //! ```python
-//! import nexdl
+//! import deltegic
 //!
-//! class MyAddon(nexdl.Addon):
+//! class MyAddon(deltegic.Addon):
 //!     def name(self) -> str: return "my-addon"
 //!     def version(self) -> str: return "1.0.0"
 //!     def can_handle(self, url: str) -> bool: return "mysite.com" in url
-//!     def extract(self, ctx: nexdl.Context) -> list[nexdl.DownloadItem]: ...
-//!     def download(self, item: nexdl.DownloadItem, ctx: nexdl.Context) -> None: ...
-//!     def post_process(self, item: nexdl.DownloadItem, ctx: nexdl.Context) -> None: ...
+//!     def extract(self, ctx: deltegic.Context) -> list[deltegic.DownloadItem]: ...
+//!     def download(self, item: deltegic.DownloadItem, ctx: deltegic.Context) -> None: ...
+//!     def post_process(self, item: deltegic.DownloadItem, ctx: deltegic.Context) -> None: ...
 //! ```
 
 use pyo3::prelude::*;
@@ -168,21 +168,22 @@ impl PyHttpClient {
 
 fn blocking_get(url: &str, cookies: String, headers: HashMap<String, String>) -> PyResult<String> {
     let url = url.to_string();
+    let url_clone = url.clone();
     std::thread::spawn(move || {
         let rt = tokio::runtime::Runtime::new()
-            .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!("Tokio runtime error: {e}")))?;
         rt.block_on(async move {
             let client = reqwest::Client::builder()
                 .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
                 .build()
-                .map_err(|e| PyErr::new::<pyo3::exceptions::PyIOError, _>(e.to_string()))?;
+                .map_err(|e| PyErr::new::<pyo3::exceptions::PyIOError, _>(format!("HTTP client build error for {}: {e}", url_clone)))?;
             let mut req = client.get(&url);
             if !cookies.is_empty() { req = req.header("Cookie", &cookies); }
             for (k, v) in &headers { req = req.header(k.as_str(), v.as_str()); }
             req.send().await
-                .map_err(|e| PyErr::new::<pyo3::exceptions::PyIOError, _>(e.to_string()))?
+                .map_err(|e| PyErr::new::<pyo3::exceptions::PyIOError, _>(format!("HTTP request failed for {}: {e}", url)))?
                 .text().await
-                .map_err(|e| PyErr::new::<pyo3::exceptions::PyIOError, _>(e.to_string()))
+                .map_err(|e| PyErr::new::<pyo3::exceptions::PyIOError, _>(format!("HTTP read failed: {e}")))
         })
     }).join().map_err(|_| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>("Thread panicked"))?
 }
@@ -381,10 +382,10 @@ impl PyAddonBase {
     }
 }
 
-// ── nexdl module factory ──────────────────────────────────────────────────────
+// ── deltegic module factory ──────────────────────────────────────────────────────
 
-pub fn create_nexdl_module(py: Python<'_>) -> PyResult<Bound<'_, pyo3::types::PyModule>> {
-    let m = pyo3::types::PyModule::new_bound(py, "nexdl")?;
+pub fn create_deltegic_module(py: Python<'_>) -> PyResult<Bound<'_, pyo3::types::PyModule>> {
+    let m = pyo3::types::PyModule::new_bound(py, "deltegic")?;
     m.add_class::<PyAddonBase>()?;
     m.add_class::<PyDownloadItem>()?;
     m.add_class::<PyHttpClient>()?;

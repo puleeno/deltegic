@@ -57,24 +57,31 @@ component TaskRow {
     in property <string> speed;
     in property <string> eta;
     in property <string> addon-name;
+    in property <string> message;
+    in property <string> error;
+    in property <bool> selected;
 
     callback pause-clicked(string);
     callback resume-clicked(string);
     callback cancel-clicked(string);
     callback remove-clicked(string);
+    callback row-clicked(string);
 
     private property <bool> hovered: false;
 
     Rectangle {
-        height: 78px;
-        background: hovered ? Theme.bg-card.with-alpha(0.6) : Theme.bg-card.with-alpha(0.3);
+        height: selected ? 100px : 78px;
+        background: selected ? Theme.accent.with-alpha(0.1)
+            : hovered ? Theme.bg-card.with-alpha(0.6) : Theme.bg-card.with-alpha(0.3);
         border-radius: 8px;
-        border-color: hovered ? Theme.accent.with-alpha(0.4) : Theme.border;
+        border-color: selected ? Theme.accent : hovered ? Theme.accent.with-alpha(0.4) : Theme.border;
         border-width: 1px;
+        animate height { duration: 200ms; easing: ease-out; }
         animate background { duration: 120ms; }
 
         touch-area := TouchArea {
-            mouse-cursor: default;
+            mouse-cursor: pointer;
+            clicked => { row-clicked(task-id); }
             pointer-event(e) => {
                 if (e.kind == PointerEventKind.move) { hovered = true; }
             }
@@ -87,7 +94,7 @@ component TaskRow {
 
             // Main info column
             VerticalLayout {
-                spacing: 4px;
+                spacing: 3px;
                 alignment: start;
                 horizontal-stretch: 1;
 
@@ -128,6 +135,7 @@ component TaskRow {
                     max-width: 700px;
                 }
 
+                // Status line
                 HorizontalLayout {
                     spacing: 12px;
                     alignment: start;
@@ -156,6 +164,34 @@ component TaskRow {
                     }
 
                     if status != "downloading": StatusBadge { status: status; }
+
+                    // Show message when available
+                    if message != "" && status != "downloading": Text {
+                        text: message;
+                        color: Theme.accent2;
+                        font-size: 11px;
+                        vertical-alignment: center;
+                        overflow: elide;
+                        max-width: 400px;
+                    }
+                }
+
+                // Show error when failed
+                if error != "" && status == "failed": Rectangle {
+                    background: Theme.error.with-alpha(0.1);
+                    border-radius: 4px;
+                    height: 24px;
+                    HorizontalLayout {
+                        padding-left: 8px;
+                        padding-right: 8px;
+                        Text {
+                            text: error;
+                            color: Theme.error;
+                            font-size: 11px;
+                            overflow: elide;
+                            vertical-alignment: center;
+                        }
+                    }
                 }
             }
 
@@ -325,7 +361,7 @@ component Sidebar {
                 }
                 VerticalLayout {
                     alignment: center;
-                    Text { text: "NexDL"; color: Theme.text; font-size: 16px; font-weight: 800; }
+                    Text { text: "Deltegic"; color: Theme.text; font-size: 16px; font-weight: 800; }
                     Text { text: "v0.1.0"; color: Theme.text-dim; font-size: 10px; }
                 }
             }
@@ -388,6 +424,8 @@ export struct TaskData {
     speed: string,
     eta: string,
     addon-name: string,
+    message: string,
+    error: string,
 }
 
 export struct AddonData {
@@ -420,7 +458,7 @@ export struct SchedulerData {
 
 // ─── Main Window ─────────────────────────────────────────────────────────────
 export component MainWindow inherits Window {
-    title: "NexDL — Download Manager";
+    title: "Deltegic — Download Manager";
     background: Theme.bg;
     min-width: 1000px;
     min-height: 640px;
@@ -434,12 +472,14 @@ export component MainWindow inherits Window {
     in-out property <[SchedulerData]> scheduler-tasks;
     in-out property <string> active-page: "downloads";
     in-out property <string> add-url-text;
-    in-out property <string> output-dir: "~/Downloads/NexDL";
+    in-out property <string> output-dir: "~/Downloads/Deltegic";
     in-out property <int> stat-active;
     in-out property <int> stat-queued;
     in-out property <int> stat-completed;
     in-out property <int> stat-failed;
     in-out property <string> total-speed: "0 B/s";
+    in-out property <string> selected-task-id: "";
+    in-out property <string> selected-task-log: "";
 
     // Callbacks to Rust
     callback add-url(string, string);
@@ -455,6 +495,7 @@ export component MainWindow inherits Window {
     callback open-output-dir(string);
     callback toggle-sched(string, bool);
     callback remove-sched(string);
+    callback select-task(string);
 
     HorizontalLayout {
         // Sidebar
@@ -537,10 +578,79 @@ export component MainWindow inherits Window {
                             speed: task.speed;
                             eta: task.eta;
                             addon-name: task.addon-name;
+                            message: task.message;
+                            error: task.error;
+                            selected: selected-task-id == task.id;
                             pause-clicked(id) => { pause-task(id); }
                             resume-clicked(id) => { resume-task(id); }
                             cancel-clicked(id) => { cancel-task(id); }
                             remove-clicked(id) => { remove-task(id); }
+                            row-clicked(id) => {
+                                if selected-task-id == id {
+                                    selected-task-id = "";
+                                    selected-task-log = "";
+                                } else {
+                                    select-task(id);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Task detail panel
+                if selected-task-id != "": Rectangle {
+                    height: 200px;
+                    background: Theme.bg-panel;
+                    border-radius: 8px;
+                    border-color: Theme.accent.with-alpha(0.3);
+                    border-width: 1px;
+                    vertical-stretch: 0;
+
+                    VerticalLayout {
+                        padding: 12px;
+                        spacing: 8px;
+
+                        HorizontalLayout {
+                            Text {
+                                text: "Task Log";
+                                color: Theme.accent;
+                                font-size: 13px;
+                                font-weight: 700;
+                                vertical-alignment: center;
+                            }
+                            Rectangle { horizontal-stretch: 1; }
+                            TouchArea {
+                                width: 24px;
+                                height: 24px;
+                                clicked => { selected-task-id = ""; selected-task-log = ""; }
+                                Rectangle {
+                                    width: 24px;
+                                    height: 24px;
+                                    background: Theme.border;
+                                    border-radius: 12px;
+                                    Text { text: "✕"; color: Theme.text-dim; font-size: 12px; horizontal-alignment: center; vertical-alignment: center; }
+                                }
+                            }
+                        }
+
+                        Rectangle {
+                            vertical-stretch: 1;
+                            background: Theme.bg;
+                            border-radius: 4px;
+                            border-color: Theme.border;
+                            border-width: 1px;
+
+                            ScrollView {
+                                VerticalLayout {
+                                    padding: 8px;
+                                    Text {
+                                        text: selected-task-log != "" ? selected-task-log : "No log entries yet...";
+                                        color: Theme.text-dim;
+                                        font-size: 12px;
+                                        wrap: word-wrap;
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -571,7 +681,7 @@ export component MainWindow inherits Window {
                         horizontal-alignment: center;
                     }
                     Text {
-                        text: "Place addon folders in ~/.local/share/nexdl/addons/";
+                        text: "Place addon folders in ~/.local/share/deltegic/addons/";
                         color: Theme.text-dim;
                         font-size: 13px;
                         horizontal-alignment: center;

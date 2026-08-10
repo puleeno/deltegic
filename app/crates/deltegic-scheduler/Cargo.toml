@@ -1,19 +1,14 @@
 [package]
-name = "nexdl-scheduler"
+name = "deltegic-scheduler"
 version.workspace = true
 edition.workspace = true
 
 [dependencies]
-nexdl-core = { workspace = true }
+deltegic-core = { workspace = true }
 tokio = { workspace = true }
-futures = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-anyhow = { workspace = true }
-thiserror = { workspace = true }
 tracing = { workspace = true }
 uuid = { workspace = true }
 chrono = { workspace = true }
-parking_lot = { workspace = true }
 dashmap = { workspace = true }
-async-channel = { workspace = true }

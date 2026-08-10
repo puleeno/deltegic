@@ -1,17 +1,17 @@
 [package]
-name = "nexdl-gui"
+name = "deltegic-gui"
 version.workspace = true
 edition.workspace = true
 
 [[bin]]
-name = "nexdl"
+name = "deltegic"
 path = "src/main.rs"
 
 [dependencies]
-nexdl-core = { workspace = true }
-nexdl-addon-api = { workspace = true }
-nexdl-accounts = { workspace = true }
-nexdl-scheduler = { workspace = true }
+deltegic-core = { workspace = true }
+deltegic-addon-api = { workspace = true }
+deltegic-accounts = { workspace = true }
+deltegic-scheduler = { workspace = true }
 tokio = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

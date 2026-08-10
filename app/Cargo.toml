@@ -1,17 +1,17 @@
 [workspace]
 members = [
-    "crates/nexdl-core",
-    "crates/nexdl-addon-api",
-    "crates/nexdl-accounts",
-    "crates/nexdl-scheduler",
-    "crates/nexdl-gui",
+    "crates/deltegic-core",
+    "crates/deltegic-addon-api",
+    "crates/deltegic-accounts",
+    "crates/deltegic-scheduler",
+    "crates/deltegic-gui",
 ]
 resolver = "2"
 
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
-authors = ["NexDL Team"]
+authors = ["Deltegic Team"]
 license = "MIT"
 
 [workspace.dependencies]
@@ -63,7 +63,7 @@ url = "2"
 regex = "1"
 
 # Internal crates
-nexdl-core = { path = "crates/nexdl-core" }
-nexdl-accounts = { path = "crates/nexdl-accounts" }
-nexdl-scheduler = { path = "crates/nexdl-scheduler" }
-nexdl-addon-api = { path = "crates/nexdl-addon-api" }
+deltegic-core = { path = "crates/deltegic-core" }
+deltegic-accounts = { path = "crates/deltegic-accounts" }
+deltegic-scheduler = { path = "crates/deltegic-scheduler" }
+deltegic-addon-api = { path = "crates/deltegic-addon-api" }

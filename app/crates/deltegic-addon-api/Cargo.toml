@@ -1,13 +1,14 @@
 [package]
-name = "nexdl-core"
+name = "deltegic-addon-api"
 version.workspace = true
 edition.workspace = true
 
 [dependencies]
+deltegic-core = { workspace = true }
+deltegic-accounts = { workspace = true }
 tokio = { workspace = true }
 tokio-util = "0.7"
 futures = { workspace = true }
-async-channel = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 anyhow = { workspace = true }
@@ -15,7 +16,11 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 uuid = { workspace = true }
 chrono = { workspace = true }
-reqwest = { workspace = true }
+pyo3 = { workspace = true }
 dashmap = { workspace = true }
 parking_lot = { workspace = true }
+reqwest = { workspace = true }
 url = { workspace = true }
+regex = { workspace = true }
+dirs = { workspace = true }
+async-channel = { workspace = true }

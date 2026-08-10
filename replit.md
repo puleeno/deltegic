@@ -1,4 +1,4 @@
-# NexDL
+# Deltegic
 
 Download manager with an addon system similar to JDownloader, written in Rust with Python addons via PyO3, and a native Slint GUI.
 
@@ -11,7 +11,7 @@ cd app && cargo build --release
 
 ### Run (requires display server for Slint)
 ```bash
-cd app && cargo run --bin nexdl
+cd app && cargo run --bin deltegic
 ```
 
 ### Compile-check without building binary

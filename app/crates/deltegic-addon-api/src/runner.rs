@@ -3,11 +3,11 @@ use crate::{
     registry::AddonRegistry,
     AddonApiError, Result,
 };
-use nexdl_core::{
+use deltegic_core::{
     task::{TaskId, TaskProgress, TaskStatus},
     DownloadQueue, HttpDownloader,
 };
-use nexdl_accounts::AccountStore;
+use deltegic_accounts::AccountStore;
 use pyo3::prelude::*;
 use std::{path::PathBuf, sync::Arc};
 use tracing::{error, info, warn};
@@ -44,6 +44,14 @@ impl AddonRunner {
 
         if token.is_cancelled() || matches!(task.status, TaskStatus::Cancelled) {
             return Ok(());
+        }
+
+        if url::Url::parse(&task.url).is_err() {
+            self.queue.update_status(task_id, TaskStatus::Failed {
+                error: format!("Invalid URL: {}", task.url),
+                retries: 0,
+            }).ok();
+            return Err(AddonApiError::Execution(format!("Invalid URL: {}", task.url)));
         }
 
         let addon_name = self.registry.find_for_url(&task.url);
@@ -151,18 +159,21 @@ impl AddonRunner {
                 let py_items: Vec<PyDownloadItem> = items_py.extract()
                     .map_err(|e| AddonApiError::TypeError(format!("extract() return type: {e}")))?;
 
-                Ok(py_items.into_iter().enumerate().map(|(i, item)| ExtractedItem {
+                Ok(py_items.into_iter().map(|item| ExtractedItem {
                     url: item.url,
                     title: item.title,
                     output_path: item.output_path,
                     filename: item.filename,
-                    index: i,
                 }).collect())
             })
         }).await.map_err(|e| AddonApiError::Execution(e.to_string()))??;
 
         if items.is_empty() {
-            warn!(task_id = %task_id, "Addon extracted 0 items");
+            warn!(task_id = %task_id, "Addon extracted 0 items — task may need login cookies or URL is not supported");
+            self.queue.update_status(task_id, TaskStatus::Failed {
+                error: "Addon extracted 0 items. Try adding a logged-in account in the Accounts tab.".to_string(),
+                retries: 0,
+            }).ok();
             return Ok(());
         }
 
@@ -254,7 +265,15 @@ impl AddonRunner {
         token: &tokio_util::sync::CancellationToken,
     ) -> Result<()> {
         let dl = HttpDownloader::default();
-        let filename = url.split('/').last().unwrap_or("download").to_string();
+        let filename = {
+            let last_segment = url.split('/').last().unwrap_or("download");
+            let name = last_segment.split('?').next().unwrap_or(last_segment);
+            let sanitized: String = name.chars().map(|c| match c {
+                '<' | '>' | '"' | '/' | '\\' | '|' | ':' | '?' | '*' => '_',
+                _ => c,
+            }).collect();
+            if sanitized.is_empty() { "download".to_string() } else { sanitized }
+        };
         let out_dir = if output_dir.is_empty() {
             self.default_output_dir.to_string_lossy().to_string()
         } else {
@@ -292,5 +311,4 @@ struct ExtractedItem {
     title: String,
     output_path: String,
     filename: String,
-    index: usize,
 }

@@ -7,10 +7,10 @@ import re
 import json
 import subprocess
 import shutil
-import nexdl
+import deltegic
 
 
-class YouTubeAddon(nexdl.Addon):
+class YouTubeAddon(deltegic.Addon):
 
     def name(self) -> str:
         return "youtube"
@@ -30,7 +30,7 @@ class YouTubeAddon(nexdl.Addon):
     def can_handle(self, url: str) -> bool:
         return any(s in url for s in ["youtube.com/", "youtu.be/"])
 
-    def extract(self, ctx: nexdl.Context) -> list[nexdl.DownloadItem]:
+    def extract(self, ctx: deltegic.Context) -> list[deltegic.DownloadItem]:
         url = ctx.url
         ctx.log("info", f"Extracting from YouTube: {url}")
 
@@ -41,7 +41,7 @@ class YouTubeAddon(nexdl.Addon):
             ctx.log("warn", "yt-dlp not found — falling back to basic extraction")
             return self._extract_basic(url, ctx)
 
-    def _extract_via_ytdlp(self, url: str, ctx: nexdl.Context) -> list[nexdl.DownloadItem]:
+    def _extract_via_ytdlp(self, url: str, ctx: deltegic.Context) -> list[deltegic.DownloadItem]:
         """Use yt-dlp --dump-json to get video info without downloading"""
         try:
             result = subprocess.run(
@@ -58,7 +58,7 @@ class YouTubeAddon(nexdl.Addon):
             video_id = info.get("id", "unknown")
 
             # Build a yt-dlp download item (custom download method)
-            item = nexdl.DownloadItem(
+            item = deltegic.DownloadItem(
                 url=url,
                 title=title,
                 filename=f"{self._safe_filename(title)}.{ext}",
@@ -78,7 +78,7 @@ class YouTubeAddon(nexdl.Addon):
             ctx.log("error", f"yt-dlp exception: {e}")
         return []
 
-    def download(self, item: nexdl.DownloadItem, ctx: nexdl.Context) -> None:
+    def download(self, item: deltegic.DownloadItem, ctx: deltegic.Context) -> None:
         """Override download to use yt-dlp for actual download"""
         if item.metadata.get("use_ytdlp") == "true" and shutil.which("yt-dlp"):
             self._download_via_ytdlp(item, ctx)
@@ -86,7 +86,7 @@ class YouTubeAddon(nexdl.Addon):
             # Fallback: direct HTTP download
             ctx.http.download(item.url, item.output_path)
 
-    def _download_via_ytdlp(self, item: nexdl.DownloadItem, ctx: nexdl.Context) -> None:
+    def _download_via_ytdlp(self, item: deltegic.DownloadItem, ctx: deltegic.Context) -> None:
         output_template = f"{ctx.output_dir}/%(title)s.%(ext)s"
         cookie_header = ctx.http.cookies if ctx.http.cookies else None
 
@@ -122,7 +122,7 @@ class YouTubeAddon(nexdl.Addon):
 
         ctx.log("info", "yt-dlp download complete")
 
-    def _extract_basic(self, url: str, ctx: nexdl.Context) -> list[nexdl.DownloadItem]:
+    def _extract_basic(self, url: str, ctx: deltegic.Context) -> list[deltegic.DownloadItem]:
         """Basic extraction without yt-dlp"""
         html = ctx.http.get(url)
         title = re.search(r'"title":"([^"]{5,100})"', html)
@@ -137,7 +137,7 @@ class YouTubeAddon(nexdl.Addon):
             m = re.search(p, html)
             if m:
                 video_url = m.group(1).replace("\\u0026", "&")
-                item = nexdl.DownloadItem(
+                item = deltegic.DownloadItem(
                     url=video_url,
                     title=title,
                     filename=self._safe_filename(title) + ".mp4",

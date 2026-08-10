@@ -5,10 +5,10 @@ Requires logged-in Instagram session cookies via Account Manager.
 """
 import re
 import json
-import nexdl
+import deltegic
 
 
-class InstagramAddon(nexdl.Addon):
+class InstagramAddon(deltegic.Addon):
 
     def name(self) -> str:
         return "instagram"
@@ -28,7 +28,7 @@ class InstagramAddon(nexdl.Addon):
     def can_handle(self, url: str) -> bool:
         return "instagram.com" in url
 
-    def extract(self, ctx: nexdl.Context) -> list[nexdl.DownloadItem]:
+    def extract(self, ctx: deltegic.Context) -> list[deltegic.DownloadItem]:
         url = ctx.url
         ctx.log("info", f"Extracting from Instagram: {url}")
 
@@ -49,7 +49,7 @@ class InstagramAddon(nexdl.Addon):
         m = re.search(r'/(?:p|reel|tv)/([A-Za-z0-9_-]+)', url)
         return m.group(1) if m else None
 
-    def _extract_post(self, url: str, ctx: nexdl.Context) -> list[nexdl.DownloadItem]:
+    def _extract_post(self, url: str, ctx: deltegic.Context) -> list[deltegic.DownloadItem]:
         shortcode = self._get_shortcode(url)
         if not shortcode:
             ctx.log("error", f"Could not extract shortcode from {url}")
@@ -66,10 +66,10 @@ class InstagramAddon(nexdl.Addon):
             ctx.log("warn", f"GraphQL failed: {e}, trying oEmbed")
             return self._extract_via_oembed(url, ctx)
 
-    def _extract_reel(self, url: str, ctx: nexdl.Context) -> list[nexdl.DownloadItem]:
+    def _extract_reel(self, url: str, ctx: deltegic.Context) -> list[deltegic.DownloadItem]:
         return self._extract_post(url, ctx)
 
-    def _extract_stories(self, url: str, ctx: nexdl.Context) -> list[nexdl.DownloadItem]:
+    def _extract_stories(self, url: str, ctx: deltegic.Context) -> list[deltegic.DownloadItem]:
         ctx.log("info", "Stories extraction requires authentication")
         # Stories need session — attempt with cookies
         html = ctx.http.get(url)
@@ -81,7 +81,7 @@ class InstagramAddon(nexdl.Addon):
 
         for i, vu in enumerate(video_urls):
             vu = vu.replace("\\/", "/")
-            item = nexdl.DownloadItem(
+            item = deltegic.DownloadItem(
                 url=vu,
                 title=f"Story {i+1}",
                 filename=f"story_{i+1:03d}.mp4",
@@ -92,7 +92,7 @@ class InstagramAddon(nexdl.Addon):
 
         for i, iu in enumerate(image_urls[:len(image_urls)]):
             iu = iu.replace("\\/", "/")
-            item = nexdl.DownloadItem(
+            item = deltegic.DownloadItem(
                 url=iu,
                 title=f"Story Photo {i+1}",
                 filename=f"story_photo_{i+1:03d}.jpg",
@@ -102,7 +102,7 @@ class InstagramAddon(nexdl.Addon):
 
         return items
 
-    def _media_to_items(self, media: dict, ctx: nexdl.Context) -> list[nexdl.DownloadItem]:
+    def _media_to_items(self, media: dict, ctx: deltegic.Context) -> list[deltegic.DownloadItem]:
         items = []
         typename = media.get("__typename", "")
 
@@ -120,7 +120,7 @@ class InstagramAddon(nexdl.Addon):
             video_url = media.get("video_url", "")
             caption = self._get_caption(media)
             if video_url:
-                item = nexdl.DownloadItem(
+                item = deltegic.DownloadItem(
                     url=video_url,
                     title=caption or "Instagram Video",
                     filename=self._safe_filename(caption or "instagram_video") + ".mp4",
@@ -134,7 +134,7 @@ class InstagramAddon(nexdl.Addon):
             caption = self._get_caption(media)
             if display_url:
                 display_url = display_url.replace("\\/", "/")
-                item = nexdl.DownloadItem(
+                item = deltegic.DownloadItem(
                     url=display_url,
                     title=caption or "Instagram Photo",
                     filename=self._safe_filename(caption or "instagram_photo") + ".jpg",
@@ -144,7 +144,7 @@ class InstagramAddon(nexdl.Addon):
 
         return items
 
-    def _extract_via_oembed(self, url: str, ctx: nexdl.Context) -> list[nexdl.DownloadItem]:
+    def _extract_via_oembed(self, url: str, ctx: deltegic.Context) -> list[deltegic.DownloadItem]:
         """Fallback: use oEmbed for basic info"""
         oembed_url = f"https://www.instagram.com/oembed/?url={url}"
         try:
@@ -152,7 +152,7 @@ class InstagramAddon(nexdl.Addon):
             thumbnail = data.get("thumbnail_url", "")
             title = data.get("title", "Instagram Post")
             if thumbnail:
-                item = nexdl.DownloadItem(
+                item = deltegic.DownloadItem(
                     url=thumbnail,
                     title=title,
                     filename=self._safe_filename(title) + ".jpg",

@@ -9,10 +9,10 @@ to reupload what was downloaded.
 import re
 import os
 import json
-import nexdl
+import deltegic
 
 
-class ReupExampleAddon(nexdl.Addon):
+class ReupExampleAddon(deltegic.Addon):
     """
     Example reup addon — copies finished downloads to a destination.
     In practice, replace _reup() with actual upload logic (S3, FTP, etc.).
@@ -36,7 +36,7 @@ class ReupExampleAddon(nexdl.Addon):
     def can_handle(self, url: str) -> bool:
         return False  # Not a URL handler
 
-    def post_process(self, item: nexdl.DownloadItem, ctx: nexdl.Context) -> None:
+    def post_process(self, item: deltegic.DownloadItem, ctx: deltegic.Context) -> None:
         """Called after each item is downloaded."""
         enabled = ctx.get_option("reup_enabled", "false")
         if enabled.lower() != "true":
@@ -50,7 +50,7 @@ class ReupExampleAddon(nexdl.Addon):
         ctx.log("info", f"Reupping {item.output_path} -> {destination}")
         self._reup(item.output_path, destination, ctx)
 
-    def _reup(self, source_path: str, destination: str, ctx: nexdl.Context) -> None:
+    def _reup(self, source_path: str, destination: str, ctx: deltegic.Context) -> None:
         """
         Replace this with actual upload logic:
         - S3: use boto3
@@ -73,7 +73,7 @@ class ReupExampleAddon(nexdl.Addon):
             shutil.copy2(source_path, dest_file)
             ctx.log("info", f"Copied to {dest_file}")
 
-    def _reup_s3(self, path: str, s3_url: str, ctx: nexdl.Context) -> None:
+    def _reup_s3(self, path: str, s3_url: str, ctx: deltegic.Context) -> None:
         import subprocess
         result = subprocess.run(
             ["aws", "s3", "cp", path, s3_url],
@@ -83,7 +83,7 @@ class ReupExampleAddon(nexdl.Addon):
             raise RuntimeError(f"S3 upload failed: {result.stderr}")
         ctx.log("info", f"Uploaded to S3: {s3_url}")
 
-    def _reup_rclone(self, path: str, destination: str, ctx: nexdl.Context) -> None:
+    def _reup_rclone(self, path: str, destination: str, ctx: deltegic.Context) -> None:
         import subprocess
         # Format: rclone:remote:path
         remote = destination[len("rclone:"):]
@@ -95,7 +95,7 @@ class ReupExampleAddon(nexdl.Addon):
             raise RuntimeError(f"rclone failed: {result.stderr}")
         ctx.log("info", f"Uploaded via rclone to {remote}")
 
-    def _reup_ftp(self, path: str, ftp_url: str, ctx: nexdl.Context) -> None:
+    def _reup_ftp(self, path: str, ftp_url: str, ctx: deltegic.Context) -> None:
         from ftplib import FTP
         from urllib.parse import urlparse
         parsed = urlparse(ftp_url)
