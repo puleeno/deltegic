@@ -1,0 +1,21 @@
+[package]
+name = "nexdl-core"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+tokio = { workspace = true }
+tokio-util = "0.7"
+futures = { workspace = true }
+async-channel = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+reqwest = { workspace = true }
+dashmap = { workspace = true }
+parking_lot = { workspace = true }
+url = { workspace = true }

@@ -1,0 +1,27 @@
+kind = "web"
+previewPath = "/nexdl-web/"
+title = "NexDL Web UI"
+version = "1.0.0"
+id = "artifacts/nexdl-web"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/nexdl-web/" ]
+localPort = 25790
+
+[services.development]
+run = "pnpm --filter @workspace/nexdl-web run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/nexdl-web", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/nexdl-web/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "25790"
+BASE_PATH = "/nexdl-web/"

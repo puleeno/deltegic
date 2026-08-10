@@ -1,0 +1,28 @@
+[package]
+name = "nexdl-gui"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "nexdl"
+path = "src/main.rs"
+
+[dependencies]
+nexdl-core = { workspace = true }
+nexdl-addon-api = { workspace = true }
+nexdl-accounts = { workspace = true }
+nexdl-scheduler = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+slint = "=1.9.2"
+dirs = { workspace = true }
+parking_lot = { workspace = true }
+
+[build-dependencies]
+slint-build = "=1.9.2"

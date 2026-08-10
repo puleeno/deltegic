@@ -1,0 +1,982 @@
+import { Button, ListView, ProgressIndicator, LineEdit, ComboBox, CheckBox, ScrollView } from "std-widgets.slint";
+export { CaptchaWindow } from "captcha.slint";
+
+// Color palette
+global Theme {
+    out property <color> bg: #1a1a2e;
+    out property <color> bg-panel: #16213e;
+    out property <color> bg-card: #0f3460;
+    out property <color> accent: #e94560;
+    out property <color> accent2: #533483;
+    out property <color> text: #eaeaea;
+    out property <color> text-dim: #8a8a9a;
+    out property <color> success: #4caf50;
+    out property <color> warning: #ff9800;
+    out property <color> error: #f44336;
+    out property <color> border: #2a2a4a;
+}
+
+// Task status badge
+component StatusBadge {
+    in property <string> status;
+
+    private property <color> badge-color: status == "downloading" ? Theme.accent2
+        : status == "completed" ? Theme.success
+        : status == "failed" ? Theme.error
+        : status == "paused" ? Theme.warning
+        : status == "queued" ? Theme.text-dim
+        : status == "captcha_required" ? Theme.warning
+        : Theme.text-dim;
+
+    Rectangle {
+        background: badge-color.with-alpha(0.2);
+        border-color: badge-color;
+        border-width: 1px;
+        border-radius: 4px;
+        width: 100px;
+        height: 22px;
+
+        Text {
+            text: status;
+            color: badge-color;
+            font-size: 11px;
+            font-weight: 600;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+}
+
+// A single download task row
+component TaskRow {
+    in property <string> task-id;
+    in property <string> title;
+    in property <string> url;
+    in property <string> status;
+    in property <float> progress;       // 0..100
+    in property <string> speed;
+    in property <string> eta;
+    in property <string> addon-name;
+
+    callback pause-clicked(string);
+    callback resume-clicked(string);
+    callback cancel-clicked(string);
+    callback remove-clicked(string);
+
+    private property <bool> hovered: false;
+
+    Rectangle {
+        height: 78px;
+        background: hovered ? Theme.bg-card.with-alpha(0.6) : Theme.bg-card.with-alpha(0.3);
+        border-radius: 8px;
+        border-color: hovered ? Theme.accent.with-alpha(0.4) : Theme.border;
+        border-width: 1px;
+        animate background { duration: 120ms; }
+
+        touch-area := TouchArea {
+            mouse-cursor: default;
+            pointer-event(e) => {
+                if (e.kind == PointerEventKind.move) { hovered = true; }
+            }
+        }
+
+        HorizontalLayout {
+            padding: 12px;
+            spacing: 12px;
+            alignment: stretch;
+
+            // Main info column
+            VerticalLayout {
+                spacing: 4px;
+                alignment: start;
+                horizontal-stretch: 1;
+
+                HorizontalLayout {
+                    spacing: 8px;
+                    alignment: start;
+
+                    Text {
+                        text: title != "" ? title : url;
+                        color: Theme.text;
+                        font-size: 13px;
+                        font-weight: 600;
+                        overflow: elide;
+                        max-width: 600px;
+                        vertical-alignment: center;
+                    }
+
+                    if addon-name != "": Rectangle {
+                        background: Theme.accent2.with-alpha(0.2);
+                        border-radius: 3px;
+                        width: 80px;
+                        height: 18px;
+                        Text {
+                            text: addon-name;
+                            color: Theme.accent2;
+                            font-size: 10px;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+
+                Text {
+                    text: url;
+                    color: Theme.text-dim;
+                    font-size: 11px;
+                    overflow: elide;
+                    max-width: 700px;
+                }
+
+                HorizontalLayout {
+                    spacing: 12px;
+                    alignment: start;
+
+                    if status == "downloading": Rectangle {
+                        width: 300px;
+                        height: 6px;
+                        background: Theme.border;
+                        border-radius: 3px;
+                        Rectangle {
+                            x: 0;
+                            y: 0;
+                            width: parent.width * (progress / 100);
+                            height: 6px;
+                            border-radius: 3px;
+                            background: @linear-gradient(90deg, Theme.accent2, Theme.accent);
+                            animate width { duration: 300ms; easing: ease-out; }
+                        }
+                    }
+
+                    if status == "downloading": Text {
+                        text: Math.round(progress) + "% · " + speed + " · ETA " + eta;
+                        color: Theme.text-dim;
+                        font-size: 11px;
+                        vertical-alignment: center;
+                    }
+
+                    if status != "downloading": StatusBadge { status: status; }
+                }
+            }
+
+            // Actions
+            VerticalLayout {
+                alignment: center;
+                spacing: 4px;
+                width: 120px;
+
+                HorizontalLayout {
+                    spacing: 4px;
+                    alignment: end;
+
+                    if status == "downloading" || status == "queued": Button {
+                        text: "⏸";
+                        width: 32px;
+                        height: 28px;
+                        clicked => { pause-clicked(task-id); }
+                    }
+
+                    if status == "paused": Button {
+                        text: "▶";
+                        width: 32px;
+                        height: 28px;
+                        clicked => { resume-clicked(task-id); }
+                    }
+
+                    if status != "completed" && status != "cancelled": Button {
+                        text: "✕";
+                        width: 32px;
+                        height: 28px;
+                        clicked => { cancel-clicked(task-id); }
+                    }
+
+                    if status == "completed" || status == "cancelled" || status == "failed": Button {
+                        text: "🗑";
+                        width: 32px;
+                        height: 28px;
+                        clicked => { remove-clicked(task-id); }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Stats bar at the top
+component StatsBar {
+    in property <int> total;
+    in property <int> active;
+    in property <int> queued;
+    in property <int> completed;
+    in property <int> failed;
+    in property <string> total-speed;
+
+    HorizontalLayout {
+        spacing: 24px;
+        padding: 8px;
+        alignment: start;
+
+        for stat in [
+            { label: "Active", value: active, color: Theme.accent2 },
+            { label: "Queued", value: queued, color: Theme.text-dim },
+            { label: "Done", value: completed, color: Theme.success },
+            { label: "Failed", value: failed, color: Theme.error },
+        ]: HorizontalLayout {
+            spacing: 6px;
+            alignment: center;
+            Text {
+                text: stat.value;
+                color: stat.color;
+                font-size: 18px;
+                font-weight: 700;
+                vertical-alignment: center;
+            }
+            Text {
+                text: stat.label;
+                color: Theme.text-dim;
+                font-size: 12px;
+                vertical-alignment: center;
+            }
+        }
+
+        Rectangle { horizontal-stretch: 1; }
+
+        HorizontalLayout {
+            spacing: 4px;
+            alignment: center;
+            Text { text: "↓"; color: Theme.accent; font-size: 14px; vertical-alignment: center; }
+            Text { text: total-speed; color: Theme.text; font-size: 14px; font-weight: 600; vertical-alignment: center; }
+        }
+    }
+}
+
+// Add URL dialog
+component AddUrlBar {
+    in-out property <string> url-text;
+    in-out property <string> output-dir;
+    callback add-url(string, string);
+
+    HorizontalLayout {
+        spacing: 8px;
+        padding-left: 8px;
+        padding-right: 8px;
+        alignment: stretch;
+        height: 48px;
+
+        Rectangle {
+            horizontal-stretch: 1;
+            background: Theme.bg-panel;
+            border-radius: 6px;
+            border-color: Theme.border;
+            border-width: 1px;
+
+            LineEdit {
+                placeholder-text: "Paste URL here (Facebook, Instagram, YouTube, or any direct link...)";
+                text: url-text;
+                edited(t) => { url-text = t; }
+                font-size: 13px;
+                width: parent.width - 16px;
+                x: 8px;
+                accepted(t) => { add-url(url-text, output-dir); url-text = ""; }
+            }
+        }
+
+        Button {
+            text: "Add Download";
+            width: 140px;
+            clicked => { add-url(url-text, output-dir); url-text = ""; }
+        }
+    }
+}
+
+// Sidebar navigation
+component Sidebar {
+    callback nav-downloads();
+    callback nav-addons();
+    callback nav-accounts();
+    callback nav-scheduler();
+    callback nav-settings();
+
+    in property <string> active-page: "downloads";
+
+    Rectangle {
+        width: 220px;
+        background: Theme.bg-panel;
+        border-color: Theme.border;
+        border-width: 0;
+
+        VerticalLayout {
+            padding: 16px;
+            spacing: 4px;
+            alignment: start;
+
+            // Logo
+            HorizontalLayout {
+                spacing: 8px;
+                padding-bottom: 24px;
+                alignment: start;
+
+                Rectangle {
+                    width: 32px;
+                    height: 32px;
+                    background: Theme.accent;
+                    border-radius: 8px;
+                    Text { text: "N"; color: white; font-size: 18px; font-weight: 900; horizontal-alignment: center; vertical-alignment: center; }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    Text { text: "NexDL"; color: Theme.text; font-size: 16px; font-weight: 800; }
+                    Text { text: "v0.1.0"; color: Theme.text-dim; font-size: 10px; }
+                }
+            }
+
+            for item in [
+                { id: "downloads", label: "Downloads", icon: "⬇" },
+                { id: "addons", label: "Addons", icon: "🧩" },
+                { id: "accounts", label: "Accounts", icon: "👤" },
+                { id: "scheduler", label: "Scheduler", icon: "⏱" },
+                { id: "settings", label: "Settings", icon: "⚙" },
+            ]: Rectangle {
+                height: 40px;
+                background: active-page == item.id ? Theme.accent.with-alpha(0.15) : transparent;
+                border-radius: 6px;
+                border-color: active-page == item.id ? Theme.accent.with-alpha(0.4) : transparent;
+                border-width: 1px;
+                animate background { duration: 100ms; }
+
+                TouchArea {
+                    clicked => {
+                        if item.id == "downloads" { nav-downloads(); }
+                        else if item.id == "addons" { nav-addons(); }
+                        else if item.id == "accounts" { nav-accounts(); }
+                        else if item.id == "scheduler" { nav-scheduler(); }
+                        else if item.id == "settings" { nav-settings(); }
+                    }
+                }
+
+                HorizontalLayout {
+                    padding-left: 12px;
+                    spacing: 10px;
+                    alignment: start;
+
+                    Text {
+                        text: item.icon;
+                        font-size: 14px;
+                        vertical-alignment: center;
+                        color: active-page == item.id ? Theme.accent : Theme.text-dim;
+                    }
+                    Text {
+                        text: item.label;
+                        font-size: 13px;
+                        font-weight: active-page == item.id ? 700 : 400;
+                        color: active-page == item.id ? Theme.text : Theme.text-dim;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ─── Task data exposed to Rust ───────────────────────────────────────────────
+export struct TaskData {
+    id: string,
+    title: string,
+    url: string,
+    status: string,
+    progress: float,
+    speed: string,
+    eta: string,
+    addon-name: string,
+}
+
+export struct AddonData {
+    name: string,
+    version: string,
+    description: string,
+    author: string,
+    enabled: bool,
+    sites: string,
+}
+
+export struct AccountData {
+    id: string,
+    label: string,
+    site: string,
+    username: string,
+    cookie-count: int,
+}
+
+export struct SchedulerData {
+    id: string,
+    name: string,
+    trigger: string,
+    action: string,
+    enabled: bool,
+    last-run: string,
+    next-run: string,
+    run-count: int,
+}
+
+// ─── Main Window ─────────────────────────────────────────────────────────────
+export component MainWindow inherits Window {
+    title: "NexDL — Download Manager";
+    background: Theme.bg;
+    min-width: 1000px;
+    min-height: 640px;
+    preferred-width: 1280px;
+    preferred-height: 800px;
+
+    // State
+    in-out property <[TaskData]> tasks;
+    in-out property <[AddonData]> addons;
+    in-out property <[AccountData]> accounts;
+    in-out property <[SchedulerData]> scheduler-tasks;
+    in-out property <string> active-page: "downloads";
+    in-out property <string> add-url-text;
+    in-out property <string> output-dir: "~/Downloads/NexDL";
+    in-out property <int> stat-active;
+    in-out property <int> stat-queued;
+    in-out property <int> stat-completed;
+    in-out property <int> stat-failed;
+    in-out property <string> total-speed: "0 B/s";
+
+    // Callbacks to Rust
+    callback add-url(string, string);
+    callback pause-task(string);
+    callback resume-task(string);
+    callback cancel-task(string);
+    callback remove-task(string);
+    callback toggle-addon(string, bool);
+    callback reload-addon(string);
+    callback open-captcha-window();
+    callback add-account();
+    callback remove-account(string);
+    callback open-output-dir(string);
+    callback toggle-sched(string, bool);
+    callback remove-sched(string);
+
+    HorizontalLayout {
+        // Sidebar
+        sidebar := Sidebar {
+            active-page: active-page;
+            nav-downloads => { active-page = "downloads"; }
+            nav-addons => { active-page = "addons"; }
+            nav-accounts => { active-page = "accounts"; }
+            nav-scheduler => { active-page = "scheduler"; }
+            nav-settings => { active-page = "settings"; }
+        }
+
+        // Main content area
+        VerticalLayout {
+            horizontal-stretch: 1;
+            spacing: 0;
+
+            // Top bar
+            Rectangle {
+                height: 48px;
+                background: Theme.bg-panel.with-alpha(0.8);
+                border-color: Theme.border;
+                border-width: 1px;
+
+                StatsBar {
+                    total: tasks.length;
+                    active: stat-active;
+                    queued: stat-queued;
+                    completed: stat-completed;
+                    failed: stat-failed;
+                    total-speed: total-speed;
+                    x: 0; y: 0;
+                    width: parent.width;
+                    height: parent.height;
+                }
+            }
+
+            // ── Downloads Page ──
+            if active-page == "downloads": VerticalLayout {
+                spacing: 8px;
+                padding: 12px;
+                horizontal-stretch: 1;
+                vertical-stretch: 1;
+
+                AddUrlBar {
+                    url-text <=> add-url-text;
+                    output-dir <=> output-dir;
+                    add-url(url, dir) => { add-url(url, dir); }
+                }
+
+                ScrollView {
+                    vertical-stretch: 1;
+                    VerticalLayout {
+                        spacing: 6px;
+                        alignment: start;
+
+                        if tasks.length == 0: VerticalLayout {
+                            alignment: center;
+                            padding: 80px;
+                            Text {
+                                text: "No downloads yet";
+                                color: Theme.text-dim;
+                                font-size: 18px;
+                                horizontal-alignment: center;
+                            }
+                            Text {
+                                text: "Paste a URL above to get started";
+                                color: Theme.text-dim;
+                                font-size: 13px;
+                                horizontal-alignment: center;
+                            }
+                        }
+
+                        for task in tasks: TaskRow {
+                            task-id: task.id;
+                            title: task.title;
+                            url: task.url;
+                            status: task.status;
+                            progress: task.progress;
+                            speed: task.speed;
+                            eta: task.eta;
+                            addon-name: task.addon-name;
+                            pause-clicked(id) => { pause-task(id); }
+                            resume-clicked(id) => { resume-task(id); }
+                            cancel-clicked(id) => { cancel-task(id); }
+                            remove-clicked(id) => { remove-task(id); }
+                        }
+                    }
+                }
+            }
+
+            // ── Addons Page ──
+            if active-page == "addons": VerticalLayout {
+                spacing: 12px;
+                padding: 16px;
+                horizontal-stretch: 1;
+                vertical-stretch: 1;
+
+                HorizontalLayout {
+                    spacing: 8px;
+                    Text { text: "Addons"; color: Theme.text; font-size: 20px; font-weight: 700; vertical-alignment: center; }
+                    Rectangle { horizontal-stretch: 1; }
+                    Button { text: "📂 Open Addon Dir"; width: 160px; }
+                    Button { text: "↺ Reload All"; width: 120px; }
+                }
+
+                if addons.length == 0: VerticalLayout {
+                    alignment: center;
+                    padding: 80px;
+                    Text {
+                        text: "No addons loaded";
+                        color: Theme.text-dim;
+                        font-size: 18px;
+                        horizontal-alignment: center;
+                    }
+                    Text {
+                        text: "Place addon folders in ~/.local/share/nexdl/addons/";
+                        color: Theme.text-dim;
+                        font-size: 13px;
+                        horizontal-alignment: center;
+                    }
+                }
+
+                ScrollView {
+                    vertical-stretch: 1;
+                    VerticalLayout {
+                        spacing: 6px;
+                        alignment: start;
+
+                        for addon in addons: Rectangle {
+                            height: 80px;
+                            background: Theme.bg-card.with-alpha(0.3);
+                            border-radius: 8px;
+                            border-color: Theme.border;
+                            border-width: 1px;
+
+                            HorizontalLayout {
+                                padding: 12px;
+                                spacing: 12px;
+                                alignment: stretch;
+
+                                VerticalLayout {
+                                    spacing: 4px;
+                                    horizontal-stretch: 1;
+                                    HorizontalLayout {
+                                        spacing: 8px;
+                                        Text { text: addon.name; color: Theme.text; font-size: 14px; font-weight: 700; vertical-alignment: center; }
+                                        Text { text: "v" + addon.version; color: Theme.text-dim; font-size: 12px; vertical-alignment: center; }
+                                    }
+                                    Text { text: addon.description; color: Theme.text-dim; font-size: 12px; }
+                                    Text { text: "Sites: " + addon.sites; color: Theme.accent2; font-size: 11px; }
+                                }
+
+                                VerticalLayout {
+                                    alignment: center;
+                                    spacing: 6px;
+                                    width: 140px;
+
+                                    CheckBox {
+                                        text: "Enabled";
+                                        checked: addon.enabled;
+                                        toggled => { toggle-addon(addon.name, self.checked); }
+                                    }
+                                    Button {
+                                        text: "Reload";
+                                        height: 28px;
+                                        clicked => { reload-addon(addon.name); }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // ── Accounts Page ──
+            if active-page == "accounts": VerticalLayout {
+                spacing: 12px;
+                padding: 16px;
+                horizontal-stretch: 1;
+                vertical-stretch: 1;
+
+                HorizontalLayout {
+                    spacing: 8px;
+                    Text { text: "Accounts & Cookies"; color: Theme.text; font-size: 20px; font-weight: 700; vertical-alignment: center; }
+                    Rectangle { horizontal-stretch: 1; }
+                    Button {
+                        text: "+ Add Account";
+                        width: 140px;
+                        clicked => { add-account(); }
+                    }
+                }
+
+                if accounts.length == 0: VerticalLayout {
+                    alignment: center;
+                    padding: 80px;
+                    Text {
+                        text: "No accounts";
+                        color: Theme.text-dim;
+                        font-size: 18px;
+                        horizontal-alignment: center;
+                    }
+                    Text {
+                        text: "Add accounts to auto-inject cookies for downloads";
+                        color: Theme.text-dim;
+                        font-size: 13px;
+                        horizontal-alignment: center;
+                    }
+                }
+
+                ScrollView {
+                    vertical-stretch: 1;
+                    VerticalLayout {
+                        spacing: 6px;
+                        alignment: start;
+
+                        for account in accounts: Rectangle {
+                            height: 72px;
+                            background: Theme.bg-card.with-alpha(0.3);
+                            border-radius: 8px;
+                            border-color: Theme.border;
+                            border-width: 1px;
+
+                            HorizontalLayout {
+                                padding: 12px;
+                                spacing: 12px;
+                                alignment: stretch;
+
+                                Rectangle {
+                                    width: 40px;
+                                    height: 40px;
+                                    background: Theme.accent2;
+                                    border-radius: 20px;
+                                    Text {
+                                        text: "●";
+                                        color: white;
+                                        font-size: 18px;
+                                        font-weight: 700;
+                                        horizontal-alignment: center;
+                                        vertical-alignment: center;
+                                    }
+                                }
+
+                                VerticalLayout {
+                                    spacing: 4px;
+                                    horizontal-stretch: 1;
+                                    alignment: center;
+                                    HorizontalLayout {
+                                        spacing: 8px;
+                                        Text { text: account.label; color: Theme.text; font-size: 14px; font-weight: 600; vertical-alignment: center; }
+                                        Rectangle {
+                                            background: Theme.bg-panel;
+                                            border-radius: 4px;
+                                            width: 90px;
+                                            height: 20px;
+                                            Text { text: account.site; color: Theme.accent; font-size: 11px; horizontal-alignment: center; vertical-alignment: center; }
+                                        }
+                                    }
+                                    Text {
+                                        text: account.username != "" ? "@" + account.username : "(no username)";
+                                        color: Theme.text-dim;
+                                        font-size: 12px;
+                                    }
+                                }
+
+                                VerticalLayout {
+                                    alignment: center;
+                                    width: 80px;
+                                    Text {
+                                        text: account.cookie-count + " cookies";
+                                        color: account.cookie-count > 0 ? Theme.success : Theme.text-dim;
+                                        font-size: 12px;
+                                        horizontal-alignment: center;
+                                    }
+                                    Button {
+                                        text: "Remove";
+                                        height: 28px;
+                                        clicked => { remove-account(account.id); }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // ── Scheduler Page ──
+            if active-page == "scheduler": VerticalLayout {
+                spacing: 12px;
+                padding: 16px;
+                horizontal-stretch: 1;
+                vertical-stretch: 1;
+
+                HorizontalLayout {
+                    spacing: 8px;
+                    Text { text: "Scheduler"; color: Theme.text; font-size: 20px; font-weight: 700; vertical-alignment: center; }
+                    Rectangle { horizontal-stretch: 1; }
+                    Button {
+                        text: "+ New Scheduled Task";
+                        width: 200px;
+                    }
+                }
+
+                Text {
+                    text: "Automate downloads, reups, and addon tasks on a schedule.";
+                    color: Theme.text-dim;
+                    font-size: 13px;
+                }
+
+                Rectangle { height: 4px; }
+
+                if scheduler-tasks.length == 0: VerticalLayout {
+                    alignment: center;
+                    padding: 80px;
+                    Text {
+                        text: "No scheduled tasks";
+                        color: Theme.text-dim;
+                        font-size: 18px;
+                        horizontal-alignment: center;
+                    }
+                    Text {
+                        text: "Click \"New Scheduled Task\" to create one";
+                        color: Theme.text-dim;
+                        font-size: 13px;
+                        horizontal-alignment: center;
+                    }
+                }
+
+                ScrollView {
+                    vertical-stretch: 1;
+                    VerticalLayout {
+                        spacing: 6px;
+                        alignment: start;
+
+                        for sched in scheduler-tasks: Rectangle {
+                            height: 72px;
+                            background: Theme.bg-card.with-alpha(0.3);
+                            border-radius: 8px;
+                            border-color: Theme.border;
+                            border-width: 1px;
+
+                            HorizontalLayout {
+                                padding: 12px;
+                                spacing: 12px;
+                                alignment: stretch;
+
+                                VerticalLayout {
+                                    spacing: 4px;
+                                    horizontal-stretch: 1;
+                                    alignment: center;
+                                    HorizontalLayout {
+                                        spacing: 8px;
+                                        Text { text: sched.name; color: Theme.text; font-size: 14px; font-weight: 600; vertical-alignment: center; }
+                                        Rectangle {
+                                            background: Theme.bg-panel;
+                                            border-radius: 4px;
+                                            width: 90px;
+                                            height: 20px;
+                                            Text { text: sched.trigger; color: Theme.accent2; font-size: 11px; horizontal-alignment: center; vertical-alignment: center; }
+                                        }
+                                    }
+                                    Text {
+                                        text: sched.action;
+                                        color: Theme.text-dim;
+                                        font-size: 12px;
+                                    }
+                                    HorizontalLayout {
+                                        spacing: 12px;
+                                        Text { text: "Last: " + sched.last-run; color: Theme.text-dim; font-size: 11px; vertical-alignment: center; }
+                                        Text { text: "Next: " + sched.next-run; color: Theme.text-dim; font-size: 11px; vertical-alignment: center; }
+                                        Text { text: "Runs: " + sched.run-count; color: Theme.text-dim; font-size: 11px; vertical-alignment: center; }
+                                    }
+                                }
+
+                                VerticalLayout {
+                                    alignment: center;
+                                    width: 80px;
+                                    spacing: 4px;
+                                    Rectangle {
+                                        width: 50px;
+                                        height: 24px;
+                                        border-radius: 12px;
+                                        background: sched.enabled ? Theme.success.with-alpha(0.2) : Theme.text-dim.with-alpha(0.2);
+                                        border-color: sched.enabled ? Theme.success : Theme.text-dim;
+                                        border-width: 1px;
+                                        TouchArea {
+                                            clicked => { toggle-sched(sched.id, !sched.enabled); }
+                                        }
+                                        Text {
+                                            text: sched.enabled ? "ON" : "OFF";
+                                            color: sched.enabled ? Theme.success : Theme.text-dim;
+                                            font-size: 11px;
+                                            font-weight: 600;
+                                            horizontal-alignment: center;
+                                            vertical-alignment: center;
+                                        }
+                                    }
+                                    Button {
+                                        text: "Delete";
+                                        height: 28px;
+                                        clicked => { remove-sched(sched.id); }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // ── Settings Page ──
+            if active-page == "settings": VerticalLayout {
+                spacing: 16px;
+                padding: 16px;
+                horizontal-stretch: 1;
+                vertical-stretch: 1;
+
+                Text { text: "Settings"; color: Theme.text; font-size: 20px; font-weight: 700; }
+
+                ScrollView {
+                    vertical-stretch: 1;
+                    VerticalLayout {
+                        spacing: 12px;
+                        alignment: start;
+
+                        // Download Directory
+                        Rectangle {
+                            background: Theme.bg-card.with-alpha(0.3);
+                            border-radius: 8px;
+                            border-color: Theme.border;
+                            border-width: 1px;
+                            height: 60px;
+                            HorizontalLayout {
+                                padding: 16px;
+                                spacing: 12px;
+                                alignment: stretch;
+                                Text { text: "Default Download Directory"; color: Theme.text; font-size: 13px; vertical-alignment: center; horizontal-stretch: 0; }
+                                LineEdit {
+                                    text <=> output-dir;
+                                    horizontal-stretch: 1;
+                                }
+                                Button { text: "Browse"; width: 80px; }
+                            }
+                        }
+
+                        // Max Concurrency
+                        Rectangle {
+                            background: Theme.bg-card.with-alpha(0.3);
+                            border-radius: 8px;
+                            border-color: Theme.border;
+                            border-width: 1px;
+                            height: 60px;
+                            HorizontalLayout {
+                                padding: 16px;
+                                spacing: 12px;
+                                alignment: stretch;
+                                Text { text: "Max Concurrent Downloads"; color: Theme.text; font-size: 13px; vertical-alignment: center; horizontal-stretch: 0; }
+                                LineEdit {
+                                    text: "4";
+                                    horizontal-stretch: 1;
+                                }
+                            }
+                        }
+
+                        // User Agent
+                        Rectangle {
+                            background: Theme.bg-card.with-alpha(0.3);
+                            border-radius: 8px;
+                            border-color: Theme.border;
+                            border-width: 1px;
+                            height: 60px;
+                            HorizontalLayout {
+                                padding: 16px;
+                                spacing: 12px;
+                                alignment: stretch;
+                                Text { text: "User Agent"; color: Theme.text; font-size: 13px; vertical-alignment: center; horizontal-stretch: 0; }
+                                LineEdit {
+                                    text: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36";
+                                    horizontal-stretch: 1;
+                                }
+                            }
+                        }
+
+                        // Proxy
+                        Rectangle {
+                            background: Theme.bg-card.with-alpha(0.3);
+                            border-radius: 8px;
+                            border-color: Theme.border;
+                            border-width: 1px;
+                            height: 60px;
+                            HorizontalLayout {
+                                padding: 16px;
+                                spacing: 12px;
+                                alignment: stretch;
+                                Text { text: "HTTP Proxy (optional)"; color: Theme.text; font-size: 13px; vertical-alignment: center; horizontal-stretch: 0; }
+                                LineEdit {
+                                    placeholder-text: "http://127.0.0.1:8080";
+                                    horizontal-stretch: 1;
+                                }
+                            }
+                        }
+
+                        // Encryption Passphrase
+                        Rectangle {
+                            background: Theme.bg-card.with-alpha(0.3);
+                            border-radius: 8px;
+                            border-color: Theme.border;
+                            border-width: 1px;
+                            height: 60px;
+                            HorizontalLayout {
+                                padding: 16px;
+                                spacing: 12px;
+                                alignment: stretch;
+                                Text { text: "Encryption Passphrase"; color: Theme.text; font-size: 13px; vertical-alignment: center; horizontal-stretch: 0; }
+                                LineEdit {
+                                    placeholder-text: "Enter passphrase for account encryption";
+                                    horizontal-stretch: 1;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
